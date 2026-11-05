@@ -1,0 +1,216 @@
+diff --git a/roll/platforms/__init__.py b/roll/platforms/__init__.py
+index 246c3b4..b85eb48 100644
+--- a/roll/platforms/__init__.py
++++ b/roll/platforms/__init__.py
+@@ -4,6 +4,7 @@ from .platform import Platform
+ from .cuda import CudaPlatform
+ from .npu import NpuPlatform
+ from .rocm import RocmPlatform
++from .xpu import XpuPlatform
+ from .unknown import UnknownPlatform
+ from .cpu import CpuPlatform
+ 
+@@ -36,6 +37,9 @@ def _init_platform() -> Platform:
+             return RocmPlatform()
+         logger.warning("Unrecognized CUDA device. Falling back to UnknownPlatform.")
+         return UnknownPlatform()
++    elif torch.xpu.is_available():
++        logger.debug("Detected Intel XPU. Initializing XPU platform.")
++        return XpuPlatform()
+     else:
+         try:
+             import torch_npu  # noqa: F401
+diff --git a/roll/platforms/platform.py b/roll/platforms/platform.py
+index e16bfcf..79c3b6c 100644
+--- a/roll/platforms/platform.py
++++ b/roll/platforms/platform.py
+@@ -65,6 +65,8 @@ class Platform:
+     # Examples: "nccl", "hccl"
+     communication_backend: str
+ 
++    supports_tensor_ipc: bool = True
++
+     def __getattr__(self, key: str):
+         """Fallback attribute accessor for device-specific Torch modules.
+ 
+@@ -101,6 +103,10 @@ class Platform:
+     def is_rocm(cls) -> bool:
+         return False
+ 
++    @classmethod
++    def is_xpu(cls) -> bool:
++        return False
++
+     @classmethod
+     def clear_cublas_workspaces(cls) -> None:
+         raise NotImplementedError
+diff --git a/roll/third_party/fsdp2/model_update.py b/roll/third_party/fsdp2/model_update.py
+index b8b2b23..03d140d 100644
+--- a/roll/third_party/fsdp2/model_update.py
++++ b/roll/third_party/fsdp2/model_update.py
+@@ -163,7 +163,7 @@ class FSDP2WeightUpdater:
+         self.infer_cluster = infer_cluster
+         self.is_colocated = is_actor_infer_overlapping_with_any_cluster(
+             infer_cluster.worker_config, actor_train=worker_config
+-        )
++        ) and current_platform.supports_tensor_ipc
+ 
+         # Colocated mode attributes
+         self._infer_parallel_cpu_group = None
+diff --git a/roll/third_party/vllm/__init__.py b/roll/third_party/vllm/__init__.py
+index 243a30f..cd54c71 100644
+--- a/roll/third_party/vllm/__init__.py
++++ b/roll/third_party/vllm/__init__.py
+@@ -113,7 +113,8 @@ async def create_async_llm(resource_placement_groups: List[Dict], headless: bool
+     os.environ["PYTORCH_CUDA_ALLOC_CONF"] = ""
+     # torch.cuda may already init, explicitly disable expandable_segments
+     # here (only matters when VLLM_USE_RAY_SPMD_WORKER=0)
+-    current_platform.memory._set_allocator_settings("expandable_segments:False")
++    if not current_platform.is_xpu():
++        current_platform.memory._set_allocator_settings("expandable_segments:False")
+ 
+     os.environ["VLLM_CACHE_ROOT"] = os.path.join(get_default_cache_root(), "vllm", os.environ.get("WORKER_NAME", ""))
+ 
+diff --git a/roll/utils/offload_states.py b/roll/utils/offload_states.py
+index 032680f..9d55ffe 100644
+--- a/roll/utils/offload_states.py
++++ b/roll/utils/offload_states.py
+@@ -18,7 +18,7 @@ def clear_memory(clear_host_memory: bool = False):
+     current_platform.synchronize()
+     gc.collect()
+     current_platform.empty_cache()
+-    if clear_host_memory:
++    if clear_host_memory and hasattr(torch._C, "_host_emptyCache"):
+         torch._C._host_emptyCache()
+ 
+ 
+diff --git a/roll/utils/ray_utils.py b/roll/utils/ray_utils.py
+index fe0f8b9..1541f80 100644
+--- a/roll/utils/ray_utils.py
++++ b/roll/utils/ray_utils.py
+@@ -5,6 +5,8 @@ import ray
+ 
+ @ray.remote
+ def get_visible_gpus(device_control_env_var: str):
++    if device_control_env_var not in os.environ:
++        return [str(gpu_id) for gpu_id in ray.get_gpu_ids()]
+     return os.environ.get(device_control_env_var, "").split(",")
+ 
+ 
+diff --git a/roll/utils/send_recv_utils.py b/roll/utils/send_recv_utils.py
+index 348d525..d447469 100644
+--- a/roll/utils/send_recv_utils.py
++++ b/roll/utils/send_recv_utils.py
+@@ -1,3 +1,4 @@
++import os
+ from typing import Dict
+ 
+ import torch
+@@ -280,6 +281,8 @@ def _bucket_named_tensors(named_tensors: list[tuple[str, torch.Tensor]]) -> tupl
+ 
+ 
+ def named_tensors_from_bucket(bucket: "torch.Tensor", tensors_meta: list[dict]) -> list[tuple[str, torch.Tensor]]:
++    if not isinstance(bucket, torch.Tensor):
++        bucket = torch.from_numpy(bucket)
+     reconstructed = []
+     for i, meta in enumerate(tensors_meta):
+         tensor = bucket[meta["start_idx"] : meta["end_idx"]].view(meta["dtype"]).reshape(torch.Size(meta["shape"]))
+@@ -311,12 +314,18 @@ def serialize_named_weights(named_weights: list[tuple[str, torch.Tensor]], infer
+ 
+     bucket, tensors_meta = _bucket_named_tensors(named_weights)
+ 
++    # Managed AutoDL containers block pidfd_getfd, which makes CUDA IPC
++    # deserialization fail even for colocated workers. Preserve the default
++    # zero-copy path unless this explicit portable transport is requested.
++    if os.getenv("ROLL_WEIGHT_SYNC_USE_CPU", "0") == "1" or not current_platform.supports_tensor_ipc:
++        bucket = bucket.detach().to("cpu").contiguous().numpy()
+     # PumpkinComment:
+     # FSDP2 will fail if using CPUOffload Policy without this check
+-    if not getattr(bucket, "is_cuda", False):
++    elif not getattr(bucket, "is_cuda", False):
+         bucket = bucket.to(current_platform.device_type).contiguous()
+ 
+-    monkey_patch_torch_reductions()
++    if getattr(bucket, "is_cuda", False):
++        monkey_patch_torch_reductions()
+ 
+     serialized_tensors = MultiprocessingSerializer.serialize({"bucket": bucket, "tensors_meta": tensors_meta})
+     return serialized_tensors
+diff --git a/roll/platforms/xpu.py b/roll/platforms/xpu.py
+new file mode 100644
+index 0000000..2c01ba3
+--- /dev/null
++++ b/roll/platforms/xpu.py
+@@ -0,0 +1,72 @@
++import torch
++
++from .platform import Platform
++from ..utils.logging import get_logger
++
++
++logger = get_logger()
++
++
++class XpuPlatform(Platform):
++    device_name: str = "INTEL"
++    device_type: str = "xpu"
++    dispatch_key: str = "XPU"
++    ray_device_key: str = "GPU"
++    device_control_env_var: str = "ZE_AFFINITY_MASK"
++    ray_experimental_noset: str = "RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR"
++    communication_backend: str = "xccl"
++    supports_tensor_ipc: bool = False
++
++    @classmethod
++    def is_xpu(cls) -> bool:
++        return True
++
++    @classmethod
++    def clear_cublas_workspaces(cls) -> None:
++        return
++
++    @classmethod
++    def set_allocator_settings(cls, env: str) -> None:
++        return
++
++    @classmethod
++    def reset_max_memory_allocated(cls, device=None) -> None:
++        torch.xpu.reset_peak_memory_stats(device)
++
++    @classmethod
++    def reset_max_memory_cached(cls, device=None) -> None:
++        torch.xpu.reset_peak_memory_stats(device)
++
++    @classmethod
++    def get_custom_env_vars(cls) -> dict:
++        env_vars = {
++            **Platform.get_common_envs(),
++            "RAY_get_check_signal_interval_milliseconds": "1",
++            "VLLM_ALLOW_INSECURE_SERIALIZATION": "1",
++            "RAY_CGRAPH_get_timeout": "600",
++        }
++        return env_vars
++
++    @classmethod
++    def get_vllm_worker_class(cls):
++        try:
++            from vllm.v1.worker.xpu_worker import XPUWorker
++
++            logger.info("Successfully imported vLLM XPU Worker.")
++            return XPUWorker
++        except ImportError as e:
++            logger.error("Failed to import vLLM Worker. Make sure vLLM is installed correctly: %s", e)
++            raise RuntimeError("vLLM is not installed or not properly configured.") from e
++
++    @classmethod
++    def get_vllm_run_time_env_vars(cls, gpu_rank: str) -> dict:
++        env_vars = {
++            "VLLM_ALLOW_INSECURE_SERIALIZATION": "1",
++            "ZE_AFFINITY_MASK": f"{gpu_rank}",
++            "RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR": "1",
++        }
++        return env_vars
++
++    @classmethod
++    def apply_ulysses_patch(cls) -> None:
++        return

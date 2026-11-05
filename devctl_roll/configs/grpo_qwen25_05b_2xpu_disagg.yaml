@@ -1,0 +1,162 @@
+# ROLL RLVR / GRPO bring-up config for 2 x Intel XPU (~32 GiB each), Qwen2.5-0.5B-Instruct.
+# Derived from the NVIDIA-proven experiment configs A0_baseline + B2_disaggregated + C3_no_transfer_queue (ROLL d3506ea).
+#
+# WHY THIS LAYOUT (evidence: NVIDIA runs B2, B2b, C3 in experiments/LEARNINGS.md)
+#   - Disaggregated (train+reference on device 0, vLLM alone on device 1): weight sync is a collective broadcast
+#     (NCCL on CUDA -> XCCL/oneCCL on XPU). It does NOT use CUDA IPC, so it is the path an XPU port can reach first.
+#   - transfer_backend.backend_name: null -> DataProto stays in the Ray object store (one component less; C3 showed no speed loss).
+#
+# WHAT YOU MUST CHANGE (only these; everything else is identical to the NVIDIA run)
+#   [1] Two environment variables, no file edit needed:
+#         export ROLL_WORK=/path/with/lots/of/space     # outputs, checkpoints, tensorboard, and the models/ folder
+#         export ROLL_REPO=/path/to/ROLL/checkout        # the clone at commit d3506ea9e280ae720fb74df9f82db6efac1c72d5
+#       and put the model at  $ROLL_WORK/models/Qwen2.5-0.5B-Instruct  (a local HF folder).
+#   [2] device_mapping lines below: device 0 = train + reference, device 1 = vLLM. Keep them inside range(0,2).
+#   [3] OPTIONAL knobs, listed at the bottom (commented). Turn one on only when something fails, and record it as a deviation.
+#
+# RUN (from the ROLL checkout, same launcher as NVIDIA; the launcher takes only --config_path/--config_name, no overrides):
+#   python examples/start_rlvr_pipeline.py --config_path <dir containing this file> --config_name rlvr_grpo_qwen2.5-0.5b_2xpu_bringup
+# Hydra's --config_path is relative to the launcher file, so pass an absolute path or use a path like ../../something.
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+exp_name: devctl_grpo_2xpu_disagg
+seed: 42
+logging_dir: ${oc.env:ROLL_WORK}/output/logs
+output_dir: ${oc.env:ROLL_WORK}/output
+model_download_type: HUGGINGFACE_HUB   # only used when pretrain is not a local folder
+
+checkpoint_config:
+  type: file_system
+  output_dir: ${oc.env:ROLL_WORK}/checkpoints/${exp_name}
+
+track_with: tensorboard
+tracker_kwargs:
+  log_dir: ${oc.env:ROLL_WORK}/tensorboard
+
+# C3: bring-up simplification (DataProto via Ray object store only)
+transfer_backend:
+  backend_name: null
+
+num_nodes: 1
+num_gpus_per_node: 2        # NOTE: ROLL overwrites this at load time with current_platform.device_count() of the driver
+
+max_steps: 4                # 4-step smoke run, same as the NVIDIA reference (A0/B2)
+save_steps: 0               # 0 = no checkpoints (a checkpoint costs 8-17 GB)
+logging_steps: 1
+eval_steps: 100
+resume_from_checkpoint: false
+
+rollout_batch_size: 8                 # prompts per step
+num_return_sequences_in_group: 4      # answers per prompt -> 32 responses per step
+prompt_length: 512
+response_length: 512
+ppo_epochs: 1
+adv_estimator: grpo
+
+init_kl_coef: 0.0
+use_kl_loss: true           # makes ROLL create the reference worker
+kl_loss_coef: 0.001
+reward_clip: 10
+advantage_clip: 2.0
+dual_clip_loss: true
+
+pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+reward_pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+
+actor_train:
+  model_args:
+    disable_gradient_checkpointing: false
+    dtype: bf16             # if the XPU/torch build cannot do bf16, use fp16 here AND in actor_infer/reference (deviation!)
+  training_args:
+    learning_rate: 1.0e-06
+    weight_decay: 0
+    per_device_train_batch_size: 2
+    gradient_accumulation_steps: 4
+    warmup_steps: 0
+    num_train_epochs: 1
+  data_args:
+    template: qwen2_5
+    file_name:
+      - ${oc.env:ROLL_REPO}/data/math_deepmath_deal.jsonl
+    domain_interleave_probs:
+      math_rule: 1.0
+    messages: messages
+    interleave_probs: '1.0'
+    preprocessing_num_workers: 4
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  device_mapping: list(range(0,1))      # [2] device 0
+  infer_batch_size: 4
+
+actor_infer:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  generating_args:
+    max_new_tokens: ${response_length}
+    top_p: 0.99
+    top_k: 100
+    num_beams: 1
+    temperature: 0.99
+    num_return_sequences: ${num_return_sequences_in_group}
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: vllm
+    strategy_config:
+      gpu_memory_utilization: 0.4       # 0.4 x ~32 GiB = ~12.8 GiB for vLLM; lower to 0.3 only if you hit out-of-memory
+      block_size: 16
+      max_model_len: 1024
+  device_mapping: list(range(1,2))      # [2] device 1 (vLLM alone)
+  infer_batch_size: 1
+
+reference:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: fsdp2_infer
+    strategy_config:
+      reshard_after_forward: true       # REQUIRED: without it the reference fails at step 1 after offload/reload (NVIDIA trap T2)
+  device_mapping: list(range(0,1))      # [2] device 0 (shares the device with actor_train)
+  infer_batch_size: 4
+
+rewards:
+  math_rule:
+    worker_cls: roll.pipeline.rlvr.rewards.math_rule_reward_worker.MathRuleRewardWorker
+    model_args:
+      model_name_or_path: ${reward_pretrain}
+    data_args:
+      template: qwen2_5
+    tag_included:
+      - deepmath_103k
+    world_size: 1
+    infer_batch_size: 1
+
+# ---------------------------------------------------------------------------------------------------------------
+# [3] OPTIONAL knobs - uncomment ONE at a time, only if needed, and write it down as a deviation from the NVIDIA run.
+#
+# (a) Environment variables for ALL workers (proven to reach every worker by NVIDIA run C1). Example shape only;
+#     the right XPU variables come from your platform class / Part 4 findings, do not copy CUDA ones:
+# system_envs:
+#   SOME_XPU_VARIABLE: "value"
+#
+# (b) Explicit attention backend (default None = transformers' own default). Add under actor_train.model_args and
+#     reference.model_args if flash-attention is picked and is unavailable on XPU:
+#       attn_implementation: sdpa
+#
+# (c) vLLM without graph capture, if the XPU vLLM build requires eager mode. Add under
+#     actor_infer.strategy_args.strategy_config:
+#       enforce_eager: true
+#
+# (d) Fewer/lighter steps while debugging: max_steps: 2, rollout_batch_size: 4.
