@@ -181,7 +181,7 @@ class BaseDMDWorker(TensorTransferWorker):
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)
+        current_platform.manual_seed_all(seed)
         torch.backends.cuda.matmul.allow_tf32 = True
         torch.backends.cudnn.allow_tf32 = True
         torch.backends.cudnn.deterministic = pipeline_config.full_determinism
@@ -429,8 +429,8 @@ class BaseDMDWorker(TensorTransferWorker):
                 "numpy": np.random.get_state(),
                 "random": random.getstate(),
             }
-            if torch.cuda.is_available():
-                rng_state["cuda"] = torch.cuda.get_rng_state_all()
+            if current_platform.is_available():
+                rng_state["cuda"] = current_platform.get_rng_state_all()
             worker_state: dict[str, Any] = {
                 "worker_step": int(self.step),
                 "rng_state": rng_state,
@@ -519,8 +519,8 @@ class BaseDMDWorker(TensorTransferWorker):
         torch.set_rng_state(rng_state["torch"])
         np.random.set_state(rng_state["numpy"])
         random.setstate(rng_state["random"])
-        if "cuda" in rng_state and torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(rng_state["cuda"])
+        if "cuda" in rng_state and current_platform.is_available():
+            current_platform.set_rng_state_all(rng_state["cuda"])
         self.step = int(worker_state["worker_step"])
         lr_scheduler_state = worker_state.get("lr_scheduler")
         if lr_scheduler_state is not None:

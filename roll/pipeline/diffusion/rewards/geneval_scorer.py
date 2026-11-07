@@ -6,6 +6,7 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 import torch
 from PIL import Image, ImageOps
+from roll.platforms import current_platform
 
 
 class GenevalScorer:
@@ -13,7 +14,7 @@ class GenevalScorer:
         self,
         detector_ckpt_path: str,
         detector_config_path: str,
-        device: str = "cuda",
+        device: str = current_platform.device_type,
         clip_ckpt_path: Optional[str] = None,
         object_names_path: Optional[str] = None,
         threshold: float = 0.3,

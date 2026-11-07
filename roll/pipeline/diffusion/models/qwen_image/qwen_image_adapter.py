@@ -35,6 +35,7 @@ from roll.pipeline.diffusion.models.base import (
     DiffuseOutput,
 )
 from roll.utils.logging import get_logger
+from roll.platforms import current_platform
 
 
 _logger = get_logger()
@@ -153,7 +154,7 @@ class QwenImageAdapter(DiffusionAdapter):
             try:
                 self.device = next(transformer.parameters()).device
             except StopIteration:
-                self.device = torch.device("cuda")
+                self.device = torch.device(current_platform.device_type)
 
     # =========================================================================
     # Internal: Single-step forward with CFG
