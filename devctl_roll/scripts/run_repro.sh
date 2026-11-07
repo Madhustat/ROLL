@@ -6,7 +6,8 @@ VARIANTS=${*:-roll warmup setdev algo}
 ALL=$N; DEVS=${DEVS:-$(seq -s " " 0 $((N-1)))}; DA=($DEVS); N=${#DA[@]}
 echo "kernel $(uname -r); driver pkgs: $(dpkg -l 2>/dev/null | awk '/intel-opencl-icd|libze-intel-gpu1|libze1|intel-level-zero-gpu/{printf "%s=%s ", $2, $3}')"
 python -c "import torch; [print('  xpu:%d driver=%s mem=%.1fGiB' % (i, torch.xpu.get_device_properties(i).driver_version, torch.xpu.get_device_properties(i).total_memory/2**30)) for i in range(torch.xpu.device_count())]" 2>/dev/null | head -2
-for c in /sys/class/drm/card[0-9]*; do [ -e $c/device/numa_node ] && echo "  $(basename $c) pci=$(basename $(readlink -f $c/device)) numa=$(cat $c/device/numa_node)"; done
+for c in /dev/dri/renderD*; do d=/sys/class/drm/$(basename $c)/device; echo "  pod GPU $(basename $c) pci=$(basename $(readlink -f $d)) numa=$(cat $d/numa_node 2>/dev/null)"; done
+for d in $DEVS; do [ "$d" -lt "$ALL" ] || { echo "DEVS index $d not present (pod has $ALL XPUs) -> exit"; exit 2; }; done
 echo "DEVS used: $DEVS (of $ALL)"
 REPEAT=${REPEAT:-1}
 echo "REPEAT=$REPEAT  XPUs: $N ($(python -c "import torch; print([torch.xpu.get_device_name(i)[-12:] for i in range(torch.xpu.device_count())])"))  variants: $VARIANTS  logs: $OUT"

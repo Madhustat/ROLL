@@ -5,6 +5,7 @@ export VIRTUAL_ENV=$R/venvs/roll-xpu
 export PATH=$VIRTUAL_ENV/bin:$PATH
 for c in /opt/intel/oneapi/compiler/latest/bin /opt/intel/oneapi/compiler/2026.1/bin; do [ -d $c ] && export PATH=$PATH:$c && break; done
 export LD_LIBRARY_PATH=$VIRTUAL_ENV/lib PYTHONPATH=$L/ROLL
+[ -n "${NEO:-}" ] && [ -d $R/neo_$NEO ] && export LD_LIBRARY_PATH=$R/neo_$NEO/usr/lib/x86_64-linux-gnu:$R/neo_$NEO/usr/local/lib:$LD_LIBRARY_PATH
 export HF_HOME=$R/hf_home PIP_CACHE_DIR=$R/pip_cache UV_CACHE_DIR=$R/pip_cache/uv KERNELS_CACHE=$R/cache/hf_kernels TMPDIR=$R/tmp
 export RAY_TMPDIR=/tmp/ray_roll
 export ROLL_WORK=$R/roll_work ROLL_REPO=$L/ROLL
