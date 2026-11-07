@@ -18,7 +18,7 @@ def clear_memory(clear_host_memory: bool = False):
     current_platform.synchronize()
     gc.collect()
     current_platform.empty_cache()
-    if clear_host_memory:
+    if clear_host_memory and hasattr(torch._C, "_host_emptyCache"):
         torch._C._host_emptyCache()
 
 
