@@ -1,0 +1,10 @@
+intel-cmplr-lib-rt==2026.1.1
+intel-cmplr-lib-ur==2026.1.1
+intel-cmplr-lic-rt==2026.1.1
+intel-sycl-rt==2026.1.1
+oneccl-devel==2022.1.2
+oneccl==2022.1.2
+dpcpp-cpp-rt==2026.1.1
+intel-opencl-rt==2026.1.1
+intel-openmp==2026.1.1
+intel-pti==1.1.0

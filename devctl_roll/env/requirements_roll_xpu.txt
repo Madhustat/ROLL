@@ -1,0 +1,77 @@
+# ROLL d3506ea9 requirements_common.txt + requirements_vision.txt + requirements_torch2100_vllm.txt, for Intel XPU.
+# Use with build_env.sh (constraints_xpu_core.txt + overrides_vllm_xpu_oneapi.txt + overrides_roll_numpy1.txt). Changes from ROLL:
+#   torch/torchvision/torchaudio, vllm (cu130) -> XPU wheels: vLLM 0.31.0+xpu (XPU wheels exist for 0.28-0.32; 0.32 lacks
+#                                  vllm.transformers_utils.configs.qwen3_5 that roll/third_party/vllm/patch_transformers.py imports)
+#   transformers==5.2.0         -> whatever vLLM 0.31 allows (ROLL's nightly image also runs -U transformers; ROLL asserts >=5.2)
+#   numpy<2.0a0,>=1.25          -> kept (TransferQueue 0.1.6 also needs numpy<2); every XPU vLLM wheel wants opencv>=4.13 (numpy>=2),
+#                                  so overrides_roll_numpy1.txt sets opencv-python-headless 4.11.0.86 (vLLM imports cv2 only for video)
+#   ray[default,cgraph]==2.48.0 -> ray[default]==2.48.0: cgraph only adds cupy-cuda12x
+#   flash-attn                  -> removed (CUDA build); kernels gives flash_attention_2 on XPU through the Hub kernel
+#   ./mcore_adapter             -> installed editable by build_env.sh, megatron-core 0.16.x (ROLL's main image uses core_dev_r0.16.0)
+ray[default]==2.48.0
+numpy<2.0a0,>=1.25
+pyarrow<26.0.0
+tensordict>=0.10.0
+sympy
+modelscope
+datasets==3.1.0
+tqdm
+peft==0.12.0
+tyro>=0.5.7
+pydantic
+pytest
+loralib
+einops
+isort
+jsonlines
+deprecated
+trl==0.9.6
+dacite
+codetiming
+more_itertools
+pybase64
+sglang-router
+TransferQueue==0.1.6
+
+wandb
+swanlab
+trackio
+
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-exporter-otlp
+opentelemetry-proto
+
+math-verify
+mathruler
+openai
+langdetect
+nltk>=3.8
+
+gym
+gymnasium[toy-text]
+gym_sokoban
+
+gem-llm==0.0.4
+mcp
+
+hydra-core
+omegaconf
+latex2sympy2==1.5.4
+latex2sympy2_extended==1.10.1
+pylatexenc==2.10.0
+antlr4-python3-runtime==4.9.3
+
+pycocotools
+qwen_vl_utils
+decord2
+rouge_score==0.1.2
+
+accelerate==1.7.0
+flash-linear-attention
+
+kernels>=0.16.0,<0.17.0
+
+# added 2026-10-31: ROLL tests need them (tracker default tensorboard; async tests marked pytest.mark.asyncio)
+tensorboard
+pytest-asyncio

@@ -1,0 +1,6 @@
+torch==2.14.0+xpu
+torchvision==0.29.1+xpu
+torchaudio==2.11.0+xpu
+triton==3.8.0+xpu
+triton-xpu==3.8.0
+vllm==0.31.0+xpu
