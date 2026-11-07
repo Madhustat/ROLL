@@ -58,7 +58,10 @@ E|tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_with_hook|9
       echo "[$(date +%T)] $b $t try $k/$n -> ${r% } ($((SECONDS-t0))s)"
       case "$r" in *FAILED*|*ERROR*|HANG*|NO_RESULT*) ;; *) break;; esac
       [ $k -lt $n ] || break
-      ( timeout 200 python /workspace/local/devctl_roll/scripts/check_xpu.py > $OUT/health_${i}_${k}.log 2>&1; true ) 2>/dev/null
+      for h in 1 2 3; do
+        ( timeout 200 python /workspace/local/devctl_roll/scripts/check_xpu.py > $OUT/health_${i}_${k}.log 2>&1; true ) 2>/dev/null
+        grep -q "HEALTH OK" $OUT/health_${i}_${k}.log && break; echo "  health check $h/3 not OK, waiting 120 s"; sleep 120
+      done
       grep -q "HEALTH OK" $OUT/health_${i}_${k}.log || { echo "GPUs unhealthy after $t -> stopping"; printf "%s\t%s\t%s\t%s\t%s\n" "$b" "$t" "$final" "$k" "$hist" >> $SUM; break 2; }
     done
     printf "%s\t%s\t%s\t%s\t%s\n" "$b" "$t" "$final" "$k" "$hist" >> $SUM
