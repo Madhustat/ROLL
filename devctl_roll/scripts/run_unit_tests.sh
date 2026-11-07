@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GPU job: ROLL unit tests on N XPUs. usage: [TRIES=n] run_unit_tests.sh [table|gpu|all]   (table = the 26 GPU-category tests one by one, hangs retried; gpu = multi-GPU files in one pytest; all = full suite)
+# GPU job: ROLL unit tests on N XPUs. usage: [TRIES=n] [ONLY="A B C"] run_unit_tests.sh [table|gpu|all]   (table = the 26 GPU-category tests one by one, hangs retried; gpu = multi-GPU files in one pytest; all = full suite)
 set -uo pipefail
 source /workspace/local/devctl_roll/scripts/env_roll_devctl.sh
 MODE=${1:-gpu}; OUT=$R/unit_tests/$(date +%Y%m%d_%H%M%S)_$MODE; mkdir -p $OUT
@@ -42,13 +42,15 @@ E|tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_with_hook|9
   i=0
   while IFS="|" read -r b t to rt <&3; do
     [ -n "$t" ] || continue
+    [ -z "${ONLY:-}" ] || case " $ONLY " in *" $b "*) ;; *) continue;; esac
     i=$((i+1)); n=$TRIES; [ "$rt" = 1 ] && n=1; hist=""; final=""
     for k in $(seq 1 $n); do
       [ -e $R/STOP ] && { echo "STOP file -> stopping"; break 2; }
       ray stop --force >/dev/null 2>&1; pkill -9 -f "VLLM::EngineCore" 2>/dev/null
       ray start --head --port 6392 --include-dashboard=false --disable-usage-stats --temp-dir=$RAY_TMPDIR >/dev/null 2>&1
       lg=$OUT/$(printf %02d $i)_try$k.log; t0=$SECONDS
-      timeout -k 30 $to python -m pytest "$t" -v -rA -o asyncio_mode=auto -p no:cacheprovider --color=no > $lg 2>&1; rc=$?
+      timeout -k 30 $to python -m pytest "$t" -v -rA -o asyncio_mode=auto -p no:cacheprovider --color=no -s > $lg 2>&1; rc=$?
+      { [ $rc = 124 ] || [ $rc = 137 ]; } && cp -r $RAY_TMPDIR/session_latest/logs $OUT/$(printf %02d $i)_try${k}_raylogs 2>/dev/null
       ray stop --force >/dev/null 2>&1; pkill -9 -f "VLLM::EngineCore" 2>/dev/null
       c=$(sed "s/\x1b\[[0-9;]*m//g" $lg | grep -E "^(PASSED|FAILED|SKIPPED|ERROR) " | awk '{print $1}' | sort | uniq -c | awk '{printf "%s%s ", $2, $1}')
       if [ $rc = 124 ] || [ $rc = 137 ]; then r="HANG(${to}s)"; elif [ -n "$c" ]; then r="$c"; else r="NO_RESULT(rc=$rc)"; fi
