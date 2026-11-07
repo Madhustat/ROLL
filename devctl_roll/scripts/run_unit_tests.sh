@@ -5,6 +5,14 @@ source /workspace/local/devctl_roll/scripts/env_roll_devctl.sh
 MODE=${1:-gpu}; OUT=$R/unit_tests/$(date +%Y%m%d_%H%M%S)_$MODE; mkdir -p $OUT
 python /workspace/local/devctl_roll/scripts/check_xpu.py 2>&1 | tail -3
 N=$(python -c "import torch; print(torch.xpu.device_count())"); echo "XPUs visible: $N"
+[ -e $R/opencl_headers/CL/cl.h ] || python - $R/opencl_headers <<'PYEOF'
+import io, shutil, sys, tarfile, urllib.request
+d = sys.argv[1]; u = "https://github.com/KhronosGroup/OpenCL-Headers/archive/refs/tags/v2024.10.24.tar.gz"
+t = tarfile.open(fileobj=io.BytesIO(urllib.request.urlopen(u, timeout=120).read()))
+t.extractall("/tmp/oclh"); shutil.copytree("/tmp/oclh/OpenCL-Headers-2024.10.24/CL", d + "/CL", dirs_exist_ok=True)
+PYEOF
+[ -e $R/opencl_headers/CL/cl.h ] && export CPATH=$R/opencl_headers${CPATH:+:$CPATH}; echo "OpenCL headers: $(ls $R/opencl_headers/CL/cl.h 2>&1)"
+[ "$N" -ge 8 ] || echo "WARNING: only $N XPUs visible; the 8-GPU log-prob tests will skip (node gnr17908 exposes 7)"
 SHM=$(df -m --output=size /dev/shm | tail -1 | tr -d " "); echo "/dev/shm: ${SHM} MiB"; [ "$SHM" -ge 4096 ] || echo "WARNING: /dev/shm < 4 GiB; vLLM tests need more (devctl test --shm-size=32Gi)"
 ray stop >/dev/null 2>&1; ray start --head --port 6392 --include-dashboard=false --disable-usage-stats --temp-dir=$RAY_TMPDIR
 cd /workspace/local/ROLL

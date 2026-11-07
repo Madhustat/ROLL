@@ -74,14 +74,12 @@ devctl logs <workload-name> --tail=100
 | Pod forbids `pidfd_getfd` (needs ptrace capability; on bare-metal Docker we needed SYS_PTRACE) | oneCCL IPC error in step 6/7 | `--env=ROLL_CCL_IPC=sockets` |
 | Small `/dev/shm` in pods (containerd default 64 MiB) | vLLM: "Insufficient space in /dev/shm: 160 MiB required" | `devctl test --shm-size=32Gi` (counted against `--memory`) |
 | B60 has 24 GB (bare-metal tests used 32 GB B70) | out of memory on vLLM start | lower `gpu_memory_utilization` in the config from 0.4 to 0.3 |
+| No OpenCL headers in the image (vLLM torch.compile: `CL/cl.h` not found) | vLLM engine start fails | `run_unit_tests.sh` fetches Khronos OpenCL-Headers into /workspace/remote/opencl_headers; env script adds CPATH |
 | No oneAPI compiler (`icpx`) in the image | Triton kernel build error (`CL/cl.h` not found) | use an image with oneAPI, or install the oneAPI DPC++ compiler into /workspace/remote |
 
 ## Unit tests on 8 GPUs
 
 ```bash
-# One time in WSL: device-neutral test changes (devctl runs only, not for upstream), then sync
-cd ~/src/roll-devctl/ROLL && git apply ../devctl_roll/tests_xpu_device_neutral.patch && cd .. && devctl -n dev session sync --workspace=$HOME/src/roll-devctl
-
 # The 26 GPU-category tests one by one (hangs retried, TRIES=3). Summary table: /workspace/remote/unit_tests/<time>_table/summary.tsv
 devctl -n dev test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi --shm-size=32Gi \
   --command="bash,/workspace/local/devctl_roll/scripts/run_unit_tests.sh,table" --attach

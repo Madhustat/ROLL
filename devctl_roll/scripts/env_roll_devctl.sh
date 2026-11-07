@@ -12,5 +12,6 @@ export CCL_SYCL_ALLREDUCE_SIMPLE_THRESHOLD=8589934592 CCL_SYCL_ALLGATHERV_SIMPLE
 CCLD=$R/oneccl_2022_0_0/lib
 [ -e $CCLD/libccl.so.2 ] && export LD_PRELOAD=$CCLD/libccl.so.2:$CCLD/libccl.so.1
 mkdir -p $TMPDIR $HF_HOME $ROLL_WORK $RAY_TMPDIR
+[ -e $R/opencl_headers/CL/cl.h ] && export CPATH=$R/opencl_headers${CPATH:+:$CPATH}
 [ "${ROLL_CCL_IPC:-}" = sockets ] && export CCL_ZE_IPC_EXCHANGE=sockets
 true
