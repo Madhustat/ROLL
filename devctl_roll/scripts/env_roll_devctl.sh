@@ -13,3 +13,4 @@ CCLD=$R/oneccl_2022_0_0/lib
 [ -e $CCLD/libccl.so.2 ] && export LD_PRELOAD=$CCLD/libccl.so.2:$CCLD/libccl.so.1
 mkdir -p $TMPDIR $HF_HOME $ROLL_WORK $RAY_TMPDIR
 [ "${ROLL_CCL_IPC:-}" = sockets ] && export CCL_ZE_IPC_EXCHANGE=sockets
+true

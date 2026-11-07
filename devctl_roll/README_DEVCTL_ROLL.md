@@ -96,3 +96,15 @@ Notes:
 - `test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_hf_device_map` is deselected: it loops over all 36,441 data rows (~15 h). ROLL's own CI also skips it on NPU.
 - `test_ray_thread_actor_cuda_mem_leak.py` allocates 39 GiB per call, so it will still fail on 24 GB B60 (it failed on 32 GB B70 too). It needs a larger GPU.
 - Tests download their models from Hugging Face (`MODEL_DOWNLOAD_TYPE=HUGGINGFACE_HUB`); the pod needs HF access.
+
+## Startup-broadcast reproducer (FSDP2 init hang)
+`run_repro.sh` runs ROLL's FSDP2 startup broadcast (`_broadcast_coalesced`, Qwen3-0.6B-sized, 500 MB buckets) on all visible XPUs, one fresh launch per variant:
+- `roll`: as ROLL's FSDP2 inference strategy (no device select, no warm-up);
+- `warmup`: 1-element all_reduce first, as ROLL's FSDP2 train strategy;
+- `setdev`: `set_device` + `device_id` before init;
+- `algo`: `CCL_BCAST=ring`.
+
+```bash
+devctl -n dev test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi \
+  --command="bash,/workspace/local/devctl_roll/scripts/run_repro.sh" --attach
+```
