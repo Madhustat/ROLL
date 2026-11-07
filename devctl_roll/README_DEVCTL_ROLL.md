@@ -72,20 +72,27 @@ devctl logs <workload-name> --tail=100
 |---|---|---|
 | Image lacks `python3.12-venv` | setup stops at the venv check | setup tries `apt-get install python3.12-venv` (needs root in the pod) |
 | Pod forbids `pidfd_getfd` (needs ptrace capability; on bare-metal Docker we needed SYS_PTRACE) | oneCCL IPC error in step 6/7 | `--env=ROLL_CCL_IPC=sockets` |
-| Small `/dev/shm` in pods (Kubernetes default 64 MB) | Ray warns "/dev/shm too small, using /tmp" | runs, slower; ask infra for a larger shm if needed |
+| Small `/dev/shm` in pods (containerd default 64 MiB) | vLLM: "Insufficient space in /dev/shm: 160 MiB required" | `devctl test --shm-size=32Gi` (counted against `--memory`) |
 | B60 has 24 GB (bare-metal tests used 32 GB B70) | out of memory on vLLM start | lower `gpu_memory_utilization` in the config from 0.4 to 0.3 |
 | No oneAPI compiler (`icpx`) in the image | Triton kernel build error (`CL/cl.h` not found) | use an image with oneAPI, or install the oneAPI DPC++ compiler into /workspace/remote |
 
 ## Unit tests on 8 GPUs
 
 ```bash
+# One time in WSL: device-neutral test changes (devctl runs only, not for upstream), then sync
+cd ~/src/roll-devctl/ROLL && git apply ../devctl_roll/tests_xpu_device_neutral.patch && cd .. && devctl -n dev session sync --workspace=$HOME/src/roll-devctl
+
+# The 26 GPU-category tests one by one (hangs retried, TRIES=3). Summary table: /workspace/remote/unit_tests/<time>_table/summary.tsv
+devctl -n dev test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi --shm-size=32Gi \
+  --command="bash,/workspace/local/devctl_roll/scripts/run_unit_tests.sh,table" --attach
+
 # GPU tests that skipped on 2 XPUs (log-probs tests place workers on devices 0-7) + the other multi-GPU tests.
 # Expect a PASSED/FAILED/SKIPPED count and "UNIT TESTS DONE rc=...". Log + junit in /workspace/remote/unit_tests/<time>_gpu/
-devctl test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=16 --memory=128Gi \
+devctl test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi --shm-size=32Gi \
   --command="bash,/workspace/local/devctl_roll/scripts/run_unit_tests.sh,gpu" --attach
 
 # Full ROLL test suite on the same 8 GPUs (long; same output location, suffix _all)
-devctl test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=16 --memory=128Gi \
+devctl test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi --shm-size=32Gi \
   --command="bash,/workspace/local/devctl_roll/scripts/run_unit_tests.sh,all" --attach
 
 # If the 8-GPU job stays Pending (no free 8-GPU node), check availability:
@@ -96,15 +103,3 @@ Notes:
 - `test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_hf_device_map` is deselected: it loops over all 36,441 data rows (~15 h). ROLL's own CI also skips it on NPU.
 - `test_ray_thread_actor_cuda_mem_leak.py` allocates 39 GiB per call, so it will still fail on 24 GB B60 (it failed on 32 GB B70 too). It needs a larger GPU.
 - Tests download their models from Hugging Face (`MODEL_DOWNLOAD_TYPE=HUGGINGFACE_HUB`); the pod needs HF access.
-
-## Startup-broadcast reproducer (FSDP2 init hang)
-`run_repro.sh` runs ROLL's FSDP2 startup broadcast (`_broadcast_coalesced`, Qwen3-0.6B-sized, 500 MB buckets) on all visible XPUs, one fresh launch per variant:
-- `roll`: as ROLL's FSDP2 inference strategy (no device select, no warm-up);
-- `warmup`: 1-element all_reduce first, as ROLL's FSDP2 train strategy;
-- `setdev`: `set_device` + `device_id` before init;
-- `algo`: `CCL_BCAST=ring`.
-
-```bash
-devctl -n dev test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi \
-  --command="bash,/workspace/local/devctl_roll/scripts/run_repro.sh" --attach
-```

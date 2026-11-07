@@ -5,6 +5,7 @@ source /workspace/local/devctl_roll/scripts/env_roll_devctl.sh
 MODE=${1:-gpu}; OUT=$R/unit_tests/$(date +%Y%m%d_%H%M%S)_$MODE; mkdir -p $OUT
 python /workspace/local/devctl_roll/scripts/check_xpu.py 2>&1 | tail -3
 N=$(python -c "import torch; print(torch.xpu.device_count())"); echo "XPUs visible: $N"
+SHM=$(df -m --output=size /dev/shm | tail -1 | tr -d " "); echo "/dev/shm: ${SHM} MiB"; [ "$SHM" -ge 4096 ] || echo "WARNING: /dev/shm < 4 GiB; vLLM tests need more (devctl test --shm-size=32Gi)"
 ray stop >/dev/null 2>&1; ray start --head --port 6392 --include-dashboard=false --disable-usage-stats --temp-dir=$RAY_TMPDIR
 cd /workspace/local/ROLL
 export MODEL_DOWNLOAD_TYPE=HUGGINGFACE_HUB
