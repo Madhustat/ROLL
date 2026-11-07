@@ -54,7 +54,7 @@ E|tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_with_hook|9
     printf "%s\t%s\t%s\t%s\t%s\n" "$b" "$t" "$final" "$k" "$hist" >> $SUM
   done 3<<< "$LIST"
   echo "F  tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_hf_device_map  NOT RUN (~15 h)"
-  echo "===== SUMMARY ($SUM)"; column -t -s $'\t' $SUM
+  echo "===== SUMMARY ($SUM)"; cat $SUM
   echo "UNIT TESTS DONE  logs: $OUT"; exit 0
 fi
 if [ "$MODE" = gpu ]; then
