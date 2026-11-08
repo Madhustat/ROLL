@@ -80,6 +80,9 @@ devctl logs <workload-name> --tail=100
 ## Unit tests on 8 GPUs
 
 ```bash
+# One time in WSL: device-call-only test changes (torch.cuda/"cuda"/nccl -> device-neutral), then sync
+cd ~/src/roll-devctl/ROLL && git apply ../devctl_roll/tests_xpu_device_neutral.patch && cd .. && devctl -n dev session sync --workspace=$HOME/src/roll-devctl
+
 # The 26 GPU-category tests one by one (hangs retried, TRIES=3). Summary table: /workspace/remote/unit_tests/<time>_table/summary.tsv
 devctl -n dev test --skip-sync --image=intel/pytorch:xpu-2.11.0-ubuntu24.04 --gpu=8 --gpu-model=B60 --cpu=40 --memory=160Gi --shm-size=32Gi \
   --command="bash,/workspace/local/devctl_roll/scripts/run_unit_tests.sh,table" --attach
