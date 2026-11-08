@@ -1725,7 +1725,7 @@ class FSDP2InferStrategy(FSDP2StrategyBase):
         ent_chunk_size = (
             getattr(self.worker_config, "logits_chunk_size", 2048)
             if getattr(self.worker_config, "use_logits_chunking", False)
-            else 0
+            else int(os.environ.get("ROLL_LOGITS_CHUNK_SIZE", "0"))
         )
         entropy = entropy_from_logits(logits, chunk_size=ent_chunk_size)
         if self.worker.rank_info.cp_size > 1:
