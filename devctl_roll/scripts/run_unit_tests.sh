@@ -36,7 +36,6 @@ B|$LP/test_fsdp_vlm_log_probs.py|1800|r
 B|$LP/test_fsdp_vlm_layer_states.py|1800|r
 B|$LP/test_fsdp_vlm_log_probs_perf.py|1800|r
 B|tests/distributed/executor/test_ray_thread_actor_cuda_mem_leak.py|900|1
-C|$V/test_fp8.py::test_fp8|900|1
 C|$V/test_fp8_perf.py|600|1
 E|tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_with_hook|900|1"
   i=0
@@ -67,6 +66,7 @@ E|tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_with_hook|9
     printf "%s\t%s\t%s\t%s\t%s\n" "$b" "$t" "$final" "$k" "$hist" >> $SUM
   done 3<<< "$LIST"
   echo "F  tests/models/test_hf_multi_gpus.py::test_hf_multi_gpus_cpu_offload_hf_device_map  NOT RUN (~15 h)"
+  echo "C  tests/third_party/vllm/test_fp8.py::test_fp8  NOT RUN (downloads Qwen3-32B, ~65 GB > 50 Gi session quota; fails on test code: ray.init twice, missing worker module)"
   echo "===== SUMMARY ($SUM)"; cat $SUM
   echo "UNIT TESTS DONE  logs: $OUT"; exit 0
 fi
