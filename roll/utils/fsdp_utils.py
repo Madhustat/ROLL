@@ -1,5 +1,6 @@
 import copy
 import dataclasses
+import os
 from abc import ABC
 from contextlib import contextmanager
 from typing import Callable
@@ -8,7 +9,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from torch.distributed.fsdp import CPUOffloadPolicy, fully_shard
-from torch.distributed.tensor import Shard, DTensor
+from torch.distributed.tensor import Shard, DTensor, distribute_tensor
 import torch.nn.functional as F
 from packaging import version
 import transformers
@@ -390,7 +391,17 @@ def fsdp2_load_full_state_dict(
 
     device_id = current_platform.current_device()
 
-    if not ep_enabled:
+    if not ep_enabled and os.environ.get("ROLL_FSDP2_INIT_WITHOUT_BROADCAST") == "1":
+        model = model.to(device=device_id)
+        cpu_offload = cpu_offload is not None
+        local_state = {}
+        for key, param in model.state_dict().items():
+            full = full_state[key].detach().to(device_id)
+            if isinstance(param, DTensor):
+                full = distribute_tensor(full, param.device_mesh, param.placements, src_data_rank=None)
+            local_state[key] = full
+        model.load_state_dict(local_state)
+    elif not ep_enabled:
         if dist.get_rank() == 0:
             model = model.to(device=device_id, non_blocking=True)
         else:

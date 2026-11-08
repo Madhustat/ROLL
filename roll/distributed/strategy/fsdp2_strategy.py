@@ -1201,6 +1201,8 @@ class FSDP2StrategyBase(InferenceStrategy):
         # accelerate v1.7.0 don't support _is_hf_initialized which is needed by use_meta_tensor
         if version.parse(accelerate.__version__) == version.parse("1.7.0"):
             use_meta_tensor = False
+        if os.environ.get("ROLL_FSDP2_INIT_WITHOUT_BROADCAST") == "1":
+            use_meta_tensor = False
         init_context = get_init_weight_context_manager(
             use_meta_tensor=use_meta_tensor,
             mesh=self.device_mesh,
