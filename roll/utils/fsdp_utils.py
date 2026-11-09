@@ -419,8 +419,9 @@ def fsdp2_load_full_state_dict(
         model = model.to(device=device_id, non_blocking=True)
 
     # rotary_emb is not in state_dict, so we need to broadcast it manually
-    for name, buf in model.named_buffers():
-        dist.broadcast(buf, src=0)
+    if os.environ.get("ROLL_FSDP2_INIT_WITHOUT_BROADCAST") != "1" or ep_enabled:
+        for name, buf in model.named_buffers():
+            dist.broadcast(buf, src=0)
 
     if cpu_offload:
         # Ensure model is on CPU but buffers are on GPU for FSDP2 CPU offload
