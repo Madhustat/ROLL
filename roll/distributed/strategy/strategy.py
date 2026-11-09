@@ -1,3 +1,4 @@
+import os
 from abc import ABC
 from concurrent import futures
 from typing import Callable, Dict, List, Optional, Tuple
@@ -168,12 +169,12 @@ class InferenceStrategy(ABC):
         """
         labels: torch.Tensor = input_ids[:, 1:].clone()
         labels[attention_mask[:, 1:] == 0] = 0  # avoid invalid token id
-        log_probs = log_probs_from_logits(logits[:, :-1], labels)
+        log_probs = log_probs_from_logits(logits[:, :-1], labels, chunk_size=int(os.environ.get("ROLL_LOGITS_CHUNK_SIZE", "0")))
         log_probs = log_probs * attention_mask[:, 1:]
         return log_probs
 
     def op_compute_entropy(self, logits: torch.Tensor, attention_mask: torch.Tensor):
-        entropy = entropy_from_logits(logits)
+        entropy = entropy_from_logits(logits, chunk_size=int(os.environ.get("ROLL_LOGITS_CHUNK_SIZE", "0")))
         entropy = entropy[:, :-1] * attention_mask[:, 1:]
         return entropy
 
