@@ -1,0 +1,26 @@
+diff --git a/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_config.yaml b/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_config.yaml
+index 8adc170..0adfa1b 100644
+--- a/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_config.yaml
++++ b/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_config.yaml
+@@ -11,7 +11,7 @@ output_dir: ./output
+ track_with: stdout
+ 
+ rollout_batch_size: 128
+-prompt_length: 8192
++prompt_length: 4096
+ response_length: 8192
+ 
+ pretrain: Qwen/Qwen3-0.6B
+diff --git a/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_rmpad_config.yaml b/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_rmpad_config.yaml
+index 9b9bc38..1450992 100644
+--- a/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_rmpad_config.yaml
++++ b/tests/distributed/strategy/log_probs/log_probs_fsdp_cp_rmpad_config.yaml
+@@ -11,7 +11,7 @@ output_dir: ./output
+ track_with: stdout
+ 
+ rollout_batch_size: 128
+-prompt_length: 8192
++prompt_length: 4096
+ response_length: 8192
+ 
+ pretrain: Qwen/Qwen3-0.6B
