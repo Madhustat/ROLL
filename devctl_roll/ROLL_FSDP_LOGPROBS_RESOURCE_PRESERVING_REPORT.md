@@ -66,8 +66,42 @@ PyTorch only, 2 ranks, Qwen3-0.6B: all ranks load the model on CPU in bf16 (as R
 
 | Run | CPU offload | Result | Last stage reached |
 |---|---|---|---|
-| on_1 | on | **HANG** (rc 124 at 300 s) | `sharded` (2.1 s); stuck in `_state_dict_utils.py:636 ← 595 ← 681 ← state_dict.py:609`, the same frames as ROLL |
-| off_1 .. off_3, on_2, on_3 | | PENDING: matrix running | |
+| off_1, off_2, off_3 | off | **PASS**, 2.1 s / 2.0 s / 2.6 s | `state_dict_set`, `LOAD_OK` |
+| on_1, on_2, on_3 | on | **HANG**, killed at 300 s each | `sharded` (2.1 s); all stuck in `_state_dict_utils.py:636 ← 595 ← 681 ← state_dict.py:609`, the same frames as ROLL |
+
+Deterministic: 3 of 3 hang with CPU offload, 3 of 3 pass without, nothing else changed between the two cases. Logs: `clean2xpu/repro_offload_{on,off}_*_r{0,1}.log`. GPUs recovered after every kill (health check passed).
+
+### Full two-rank matrix (completed)
+
+| CPU offload | `broadcast_from_rank0` | Runs | Result |
+|---|---|---|---|
+| on | True (as ROLL) | 3 | **hang 3 of 3** |
+| off | True | 3 | pass 3 of 3 (2.0-2.6 s) |
+| on | False (every rank loads its checkpoint, local distribute) | 3 | pass 3 of 3 (3.0-3.4 s) |
+| off | False | 1 | pass (2.4 s) |
+
+Synthetic diagnostic (`clean2xpu/diag_copy_bcast.py`, 2 ranks, synchronize + barrier after every step, sizes 296 MB / 6 MB / 2 MB): pageable H2D, pinned H2D, XCCL broadcast, broadcast followed by D2H slice copies into pageable and pinned memory, second-half slice: **all steps pass on both ranks**.
+
+Conclusion: the hang requires CPU offload **and** the rank-0 broadcast together, inside PyTorch's `set_model_state_dict` → `_broadcast_state_dict` → `_distribute_tensors` path. Neither alone hangs, and a plain broadcast followed by a device-to-host copy does not hang.
+
+### 7a. Environment-setting scan on the failing reproducer (CPU offload on, 2 ranks, one variable per run)
+
+| Setting | Result | Note |
+|---|---|---|
+| none (baseline) | hang 3 of 3 | |
+| `TORCH_XCCL_BLOCKING_WAIT=1` | hang | 90 s limit; stuck 2 s after start |
+| `CCL_SYCL_OUTPUT_EVENT=1` | hang | 90 s limit; stuck 2 s after start |
+| `CCL_ZE_ENABLE=0` | not applicable | XCCL fails to create a communicator without Level Zero (`onecclCommInitRank failed with code 11`) |
+| `CCL_BCAST=ring` | hang | 300 s limit |
+| `CCL_ZE_IPC_EXCHANGE=sockets` | hang | 300 s limit |
+| `CCL_ZE_COPY_ENGINE=none` | hang | 300 s limit |
+| `CCL_ZE_DEPS_SYNC=1` | hang | 300 s limit |
+| `CCL_ATL_TRANSPORT=ofi` | no change | already the default: oneCCL log on a passing run shows `provider: tcp`, `libfabric 2.4.0-impi` |
+| `FI_PROVIDER=tcp` | no change | already the default provider (see above); `fi_info` not usable here |
+
+Every hung run was killed by the timeout; the kernel log shows engine resets within 3 s of each kill (page fault response `-EINVAL`, `bcs`/`ccs` resets, one `CAT` error) and, after the second kill, a GPU 1 scheduler timeout with a device coredump and a full GT reset at 05:17:54 that recovered on its own. The health check passed after every cycle once the reset completed. The faults follow the kills, not the settings. Two more delayed GT resets followed later kills (GPU 0 at 06:02:18, GPU 1 at 06:04:18, 4-6 min after the kills at 05:57:53); a run started inside that window hung as collateral and was discarded, and the plain offload-off baseline passed again at 06:06 (2.0 s), confirming the GPUs were otherwise fine. Every genuine setting hang began about 2 s into the run, before any such reset.
+
+**Result of the scan: no environment setting avoids the hang.**
 
 ### Property comparison, ROLL `full` test vs reproducer
 
@@ -116,7 +150,7 @@ No. From code and evidence: the `full` blocker is the CPU-offload state-dict bro
 | Item | Classification | Owner |
 |---|---|---|
 | `lora` 2-XPU | clean pass | - |
-| `full` 2-XPU | platform-stack blocked: reproduces without ROLL (PyTorch XPU `set_model_state_dict` + FSDP2 `CPUOffloadPolicy` + XCCL/oneCCL broadcast never completes) | PyTorch-XPU / oneCCL stack; bug report to be filed with `repro_offload_bcast.py` |
+| `full` 2-XPU | platform-stack blocked: reproduces without ROLL; needs CPU offload **and** rank-0 broadcast together in PyTorch's `set_model_state_dict`; no environment setting avoids it | PyTorch-XPU / oneCCL stack; bug report to be filed with `repro_offload_bcast.py` |
 | `full` 8-XPU, `lora` 8-XPU on devctl | platform-stack blocked (rank-count-dependent oneCCL broadcast hang, ROLL-free reproducer `repro_bcast.py`) | oneCCL |
 | `cp`, `cp_rmpad` | resource-blocked (8 devices > 34 GB each) | hardware allocation |
 | `full` with offload off | diagnostic pass only | - |
@@ -125,9 +159,9 @@ No. From code and evidence: the `full` blocker is the CPU-offload state-dict bro
 
 1. **Does LoRA pass cleanly on two XPUs with functionality unchanged?** Yes: 3 of 3, identical metrics, only `device_mapping` and `fsdp_size` changed.
 2. **Does `full` pass cleanly on two XPUs with CPU offload unchanged?** No: it hangs at the start-up weight broadcast, 2 of 2.
-3. **Does the `full` hang reproduce without ROLL?** Yes: the PyTorch-only reproducer with CPU offload hangs at the same frames (matrix completion pending, see section 7).
+3. **Does the `full` hang reproduce without ROLL?** Yes: the PyTorch-only reproducer hangs 3 of 3 with CPU offload and passes 3 of 3 without, at the same frames as ROLL (section 7).
 4. **Would three XPUs solve it?** No; the blocker is independent of world size and more ranks increase exposure to the oneCCL broadcast hang.
 5. **Can `cp` / `cp_rmpad` keep their functionality on fewer than 8 devices?** No: 8 devices are required by code and topology, and the unchanged reference path needs more than 34 GB per device.
 6. **Which failures belong to ROLL?** None of these. `full` and the 8-XPU start-ups are platform-stack blockers; `cp` / `cp_rmpad` are resource blockers.
 
-Pending: finish the reproducer matrix (3 × off, 3 × on) and repeat the whole 2-XPU procedure on devctl 8 × B60 (NEO 26.14) as a separate experiment.
+Pending (need a decision): (a) the reproducer on the stock `intel/pytorch:xpu-2.11.0` container stack (PyTorch 2.11 + oneCCL 2021.17.2, as shipped together); (b) the reproducer and the 2-XPU `full` test on 2 CRI GPUs; (c) filing the PyTorch-XPU/oneCCL issue with `repro_offload_bcast.py`; (d) repeating the 2-XPU procedure on devctl 8 × B60.
