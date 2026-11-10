@@ -1,5 +1,5 @@
 """N-rank reproducer of ROLL's FSDP2 startup broadcast (set_model_state_dict broadcast_from_rank0). usage: repro_bcast.py <rank> <world> <port> <variant>
-variants (combine with +): roll, warmup (1-element all_reduce first, as ROLL's train strategy), setdev (set_device + device_id before init);
+variants (combine with +): roll, b500 (500-byte buckets = one broadcast per tensor, as torch set_model_state_dict), warmup (1-element all_reduce first, as ROLL's train strategy), setdev (set_device + device_id before init);
 algo and nothresh are applied by run_repro.sh through the environment."""
 import faulthandler, os, sys, time
 import torch
@@ -26,7 +26,7 @@ if rank == 0:
     for t in tensors:
         t.normal_()
 mark("alloc")
-dist._broadcast_coalesced(dist.group.WORLD, tensors, 500 * 1024 * 1024, 0)
+dist._broadcast_coalesced(dist.group.WORLD, tensors, 500 if "b500" in variant else 500 * 1024 * 1024, 0)
 mark("bcast_issued")
 torch.xpu.synchronize()
 mark("bcast_done")
