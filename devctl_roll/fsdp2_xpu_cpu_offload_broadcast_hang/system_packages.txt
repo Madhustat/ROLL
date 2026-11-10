@@ -1,0 +1,9 @@
+oneCCL runtime in use: LD_PRELOAD /madhu_Roll/oneccl_2022_0_0/x/oneccl-2022.0.0.data/data/lib/libccl.so.2
+/madhu_Roll/oneccl_2022_0_0/x/oneccl-2022.0.0.data/data/lib/libccl.so.2.0 (oneccl 2022.0.0 wheel); pip oneccl package: Version: 2022.1.2
+kernel: 7.0.0-42-generic
+os: Ubuntu 24.04.2 LTS
+intel-opencl-icd 26.31.39395.14-1~24.04~ppa1
+libigc2 2.41.9+ds1-1~24.04
+libigdgmm12:amd64 22.10.1-1~24.04~ppa1
+libze-dev:amd64 1.32.0-1~24.04~ppa1
+libze-intel-gpu1 26.31.39395.14-1~24.04~ppa1

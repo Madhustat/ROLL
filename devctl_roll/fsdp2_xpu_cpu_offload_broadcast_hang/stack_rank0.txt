@@ -1,0 +1,16 @@
+Timeout (0:03:20)!
+Thread 0x00007a022beff6c0 (most recent call first):
+  File "/usr/lib/python3.12/threading.py", line 359 in wait
+  File "/usr/lib/python3.12/threading.py", line 655 in wait
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/tqdm/_monitor.py", line 69 in run
+  File "/usr/lib/python3.12/threading.py", line 1073 in _bootstrap_inner
+  File "/usr/lib/python3.12/threading.py", line 1030 in _bootstrap
+Thread 0x00007a039ec32ac0 (most recent call first):
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/torch/distributed/_state_dict_utils.py", line 636 in _distribute_tensors
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/torch/distributed/_state_dict_utils.py", line 595 in _broadcast_tensors
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/torch/distributed/_state_dict_utils.py", line 681 in _broadcast_state_dict
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/torch/distributed/checkpoint/state_dict.py", line 609 in _load_model_state_dict
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124 in decorate_context
+  File "/madhu_Roll/stage1_20261102/venv/lib/python3.12/site-packages/torch/distributed/checkpoint/state_dict.py", line 1435 in set_model_state_dict
+  File "/madhu_Roll/stage1_20261102/clean2xpu/repro_offload_bcast.py", line 22 in <module>
+EXIT rc=124

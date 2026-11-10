@@ -84,6 +84,18 @@ Synthetic diagnostic (`clean2xpu/diag_copy_bcast.py`, 2 ranks, synchronize + bar
 
 Conclusion: the hang requires CPU offload **and** the rank-0 broadcast together, inside PyTorch's `set_model_state_dict` → `_broadcast_state_dict` → `_distribute_tensors` path. Neither alone hangs, and a plain broadcast followed by a device-to-host copy does not hang.
 
+### 7b. Same reproducer on Intel's matched stack (stock `intel/pytorch:xpu-2.11.0-ubuntu24.04` container): inconclusive
+
+Stack inside the container: PyTorch 2.11.0+xpu, oneCCL 2021.17.2, intel-sycl-rt 2025.3.2, in-image NEO 26.14 (driver 1.15.37833+4); Docker with `--device /dev/dri --ipc=host --security-opt seccomp=unconfined --cap-add SYS_PTRACE`.
+
+| Run | Result |
+|---|---|
+| reproducer, offload on | hang (300 s) |
+| reproducer, offload off | hang (120 s) — but see below |
+| plain-collective check (`diag_copy_bcast.py`), after a 5-minute settle and a passing health check | pageable and pinned H2D copies pass, then **the first plain XCCL broadcast (296 MB) hangs** |
+
+In this container a basic two-process XCCL broadcast does not complete, so its offload results carry no information about the offload bug. Not pursued further (it would mean debugging the container's collectives first). The matched-stack question stays open.
+
 ### 7a. Environment-setting scan on the failing reproducer (CPU offload on, 2 ranks, one variable per run)
 
 | Setting | Result | Note |

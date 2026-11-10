@@ -1,0 +1,4 @@
+Expected (as on NVIDIA / as with CPU offload off): both ranks print all STAGE markers through after_barrier and end with
+rank 0 offload=on broadcast=on LOAD_OK <seconds>s
+rank 1 offload=on broadcast=on LOAD_OK <seconds>s
+Typical duration with offload off: 2-3 s.
