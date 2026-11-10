@@ -87,4 +87,6 @@ Note on bucket size: `_broadcast_tensors` calls `dist._broadcast_coalesced(pg, t
 
 ## Files
 
-`repro.py`, `run.sh`, `expected.txt`, `actual.txt`, `collect_env.txt`, `pip_freeze.txt`, `system_packages.txt`, `rank0.log`, `rank1.log`, `stack_rank0.txt`, `stack_rank1.txt`, `model_matrix.md`.
+`repro.py`, `run.sh`, `expected.txt`, `actual.txt`, `collect_env.txt`, `pip_freeze.txt`, `system_packages.txt`, `rank0.log` / `rank1.log` (failing run 1), `stack_rank0.txt` / `stack_rank1.txt`, `model_matrix.md`, `ROLL_VALIDATION.md`, `ISSUE.md` (issue text), `diag_copy_bcast.py`, `diag_bcast_d2h_loop.py`.
+
+`logs/failing_offload_on/`: runs 1-3 (Qwen3-0.6B) and the Qwen2.5-0.5B / 1.5B runs, both ranks, with timestamped progress markers and the 200 s faulthandler stacks. `logs/control_offload_off/`: 3 runs × 2 ranks. `logs/control_broadcast_off/`: 3 runs × 2 ranks. `logs/stacks/`: `py-spy` dumps (ROLL `full` test ranks; `--locals` dumps of the live Qwen2.5-1.5B ranks).
