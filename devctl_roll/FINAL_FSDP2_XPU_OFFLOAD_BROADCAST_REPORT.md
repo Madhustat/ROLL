@@ -71,7 +71,7 @@ PyTorch 2.14.0+xpu (git `08187d9e0fba`); XCCL built in (no `oneccl-bind-pt`); on
 
 ## 8. Related public issues (closest match leads; not claimed to be confirmed duplicates)
 
-- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13"): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter confirmed upgrading from torch 2.12 to 2.13 resolved it with no settings changed. We are on **torch 2.14** and hit the identical symptom — this looks like a **regression** of a previously-fixed issue, not a brand-new bug. (Note: this repro used CPU offload, matching test 13/`full`; it is not confirmed to explain the separate, non-offload hang seen in `lora`/`cp`/`cp_rmpad` at higher rank counts — see section 13 below.)
+- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13" per the reporter): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter said upgrading from torch 2.12 to 2.13 resolved it. **We tested this directly (2026-11-11): a fresh, isolated venv with torch 2.13.0+xpu, everything else identical (oneCCL 2022.0.0, transformers 5.17.0, same hardware) — still hangs 3/3, identical stack frame (`state_dict.py:1435`) to torch 2.14.** So #4238's fix does not resolve this on our stack; we no longer frame our bug as a straightforward regression of it — at most it's a related, partially-overlapping issue. (Note: this repro used CPU offload, matching test 13/`full`; it is not confirmed to explain the separate, non-offload hang seen in `lora`/`cp`/`cp_rmpad` at higher rank counts — see section 13 below.)
 - intel/torch-xpu-ops #5999, #5968, #6092: related FSDP/XPU hang reports (checkpoint, grad-scaler, unshard); #5968 traces one case to a Level Zero adapter timing bug, fix pending a oneAPI pin bump.
 - pytorch/pytorch #202028, #196562: a different FSDP2 `CPUOffloadPolicy` bug (DTensor RNG tracker resets CPU randomness; not a hang).
 
@@ -110,4 +110,17 @@ Not run (team cap 4 CRI cards, node availability). Plan if 2 CRI GPUs become ava
 | 8 (B60 devctl, 1 run) | **hang** (900 s) |
 
 This matches the separate, rank-count-dependent oneCCL/XCCL broadcast hang found earlier with a bare (non-offload) reproducer (0/10 hangs at 2 ranks, 2/10 at 4, 4-6/10 at 8; see `ONECCL_BCAST_HANG_REPORT_20261108.md`). No public issue has been confirmed to match this non-offload case specifically; #4238 above is the closest related report but its repro required CPU offload, so it is not cited as covering this case. One caveat: 5 is not a power of 2, so FSDP pads to shard unevenly across 5 ranks — a less-common code path that has not been isolated from "more ranks" as the cause with only one data point.
+
+## 14. Tested torch 2.13 directly (2026-11-11) — does not fix the CPU-offload hang
+
+intel/torch-xpu-ops #4238 (cited in section 8) reports that upgrading from torch 2.12 to 2.13 fixed an apparently identical hang. To test this on our own hardware without disturbing the proven torch-2.14 setup, a **second, fully isolated venv** was built from scratch at `/madhu_Roll/stage1_20261102/venv_torch213_xpu`: `torch==2.13.0+xpu` (vs. `2.14.0+xpu`), installed from the same `download.pytorch.org/whl/xpu` index, with everything else held identical — same oneCCL 2022.0.0 preload (`LD_PRELOAD` of the same `libccl.so.2`/`.so.1` build), same `transformers==5.17.0`, same model (`Qwen/Qwen3-0.6B`), same 2×Arc Pro B70 hardware, same `repro.py`/`run.sh`. The original `venv_roll_xpu` (torch 2.14) was not touched.
+
+| Condition | torch 2.14 (original) | torch 2.13 (fresh, isolated venv) |
+|---|---|---|
+| offload on, broadcast on | hang 3/3 | **hang 3/3** |
+| offload off, broadcast on (control) | pass | pass |
+
+All 6 torch-2.13 ranks (3 runs × 2 ranks) hit the identical stack frame as torch 2.14 — `torch/distributed/checkpoint/state_dict.py:1435`, inside `set_model_state_dict`, never reaching `after_set_model_state_dict`. The passing control confirms the torch-2.13 venv itself is healthy (XPU detected, XCCL available, offload-only and broadcast-only paths work) — only the offload+broadcast combination hangs, exactly as on 2.14.
+
+**Conclusion: upgrading to torch 2.13 alone does not fix this hang on our hardware/driver/oneCCL stack.** This changes the framing in section 8: we no longer present our bug as a straightforward regression of #4238 (whose reporter's fix doesn't reproduce here) — it's at most a related issue with an overlapping symptom and code path, with a different (or additional) root cause on our platform. Logs: `torch213_test/run{1,2,3}_rank{0,1}.log`.
 

@@ -78,9 +78,20 @@ Note on bucket size: `_broadcast_tensors` calls `dist._broadcast_coalesced(pg, t
 | Qwen2.5-0.5B-Instruct (494 M, tied) | hang (1 run) |
 | Qwen2.5-1.5B-Instruct (1544 M, tied) | hang (1 run, 300 s; live stacks captured, see below) |
 
+## Tested directly on torch 2.13 (2026-11-11) — does not fix it on our stack
+
+Built a second, fully isolated venv with only the torch wheel changed (`torch==2.13.0+xpu` vs `2.14.0+xpu`, same index) — everything else identical (oneCCL 2022.0.0 preload, transformers 5.17.0, same model, same hardware). Original 2.14 venv untouched.
+
+| Condition | torch 2.14 | torch 2.13 (fresh venv) |
+|---|---|---|
+| offload on, broadcast on | hang 3/3 | **hang 3/3** |
+| offload off, broadcast on (control) | pass | pass |
+
+All 6 torch-2.13 ranks stopped at the same frame as 2.14 (`state_dict.py:1435`, in `set_model_state_dict`). The control confirms the 2.13 environment itself is healthy. **Upgrading to torch 2.13 does not fix this hang on our hardware/driver stack.**
+
 ## Related public issues (closest match leads; not claimed to be confirmed duplicates)
 
-- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13"): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter confirmed upgrading from torch 2.12 to 2.13 resolved it with no settings changed. We are on **torch 2.14** and hit the identical symptom — this looks like a **regression** of a previously-fixed issue, not a brand-new bug.
+- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13" per the reporter): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter said upgrading from torch 2.12 to 2.13 resolved it. **We tested torch 2.13 directly and it still hangs for us** — so this is at most a partial/environment-specific fix, and we no longer frame our bug as a straightforward regression of #4238.
 - intel/torch-xpu-ops #5999, #5968, #6092: related FSDP/XPU hang reports (checkpoint, grad-scaler, unshard); #5968 traces one case to a Level Zero adapter timing bug, fix pending a oneAPI pin bump.
 - pytorch/pytorch #202028, #196562: a different FSDP2 `CPUOffloadPolicy` bug (DTensor RNG tracker resets CPU randomness; not a hang).
 

@@ -1,8 +1,8 @@
-Title: [FSDP2][XPU][Regression?] set_model_state_dict with CPUOffloadPolicy and broadcast_from_rank0=True hangs over XCCL on torch 2.14 (possible regression of #4238, closed as fixed in 2.13)
+Title: [FSDP2][XPU] set_model_state_dict with CPUOffloadPolicy and broadcast_from_rank0=True hangs over XCCL on torch 2.13 and 2.14 (same symptom as closed issue #4238, not fixed by upgrading to 2.13 on this stack)
 
 ## Summary
 
-Loading an FSDP2-sharded model with `fully_shard(..., offload_policy=CPUOffloadPolicy())` and then `set_model_state_dict(model, full_state, StateDictOptions(full_state_dict=True, cpu_offload=True, broadcast_from_rank0=True))` hangs on Intel XPU over XCCL with 2 ranks. Deterministic: 3 of 3 runs. PyTorch only; no ROLL, no Ray. The same model and the same collective complete when either CPU offload or the rank-0 broadcast is removed. This closely matches a previously-reported, **closed** issue on the same hardware class (#4238, "fixed in PyTorch 2.13") — we reproduce the identical symptom on PyTorch 2.14, which suggests a regression rather than a new defect.
+Loading an FSDP2-sharded model with `fully_shard(..., offload_policy=CPUOffloadPolicy())` and then `set_model_state_dict(model, full_state, StateDictOptions(full_state_dict=True, cpu_offload=True, broadcast_from_rank0=True))` hangs on Intel XPU over XCCL with 2 ranks. Deterministic: 3 of 3 runs on torch 2.14, and **3 of 3 runs on torch 2.13** (tested directly, same hardware/oneCCL stack, only the torch wheel version changed). PyTorch only; no ROLL, no Ray. The same model and the same collective complete when either CPU offload or the rank-0 broadcast is removed. This closely matches a previously-reported, **closed** issue on the same hardware class (#4238, "fixed in PyTorch 2.13" per the reporter) — but on our stack, installing torch 2.13.0+xpu fresh (same oneCCL 2022.0.0, same transformers 5.17.0, same model) still hangs at the identical location (`torch/distributed/checkpoint/state_dict.py:1435`, inside `set_model_state_dict`). So either this is a different bug that happens to share the same symptom and code path as #4238, or #4238's fix is specific to a hardware/driver combination we don't have.
 
 ## Environment
 
@@ -55,9 +55,22 @@ The wait is in the per-tensor copy of the broadcast result into the CPU-offloade
 
 An earlier run of a Qwen2.5-1.5B pipeline with CPU offload that passed used a single FSDP2 rank, so it executed no inter-rank broadcast and is not a counter-example.
 
+## Tested directly on torch 2.13 (2026-11-11) — does not fix it on our stack
+
+To check whether upgrading to PyTorch 2.13 resolves this (as it reportedly did for #4238), we built a second, fully isolated venv with **only the torch wheel version changed** (`torch==2.13.0+xpu` instead of `2.14.0+xpu`, installed fresh from the same `download.pytorch.org/whl/xpu` index) — everything else identical: same oneCCL 2022.0.0 preload, same transformers 5.17.0, same model, same 2×Arc Pro B70 hardware, same `repro.py`/`run.sh`. The original torch-2.14 venv was left untouched.
+
+| Condition | torch 2.14 (original) | torch 2.13 (fresh venv, same stack otherwise) |
+|---|---|---|
+| offload on, broadcast on | hang 3 of 3 | **hang 3 of 3** |
+| offload off, broadcast on (control) | pass | pass |
+
+All 6 torch-2.13 ranks (3 runs × 2 ranks) stopped at the identical stack frame as torch 2.14: `torch/distributed/checkpoint/state_dict.py:1435` inside `set_model_state_dict`. The passing control confirms the torch-2.13 environment itself is healthy (XPU/XCCL work); only the offload+broadcast combination hangs, same as on 2.14.
+
+**Conclusion: upgrading to torch 2.13 does not fix this on our hardware/driver stack.** This weakens the "regression of #4238, fixed in 2.13" framing — either this is a different bug that happens to produce the same symptom and the same code path as #4238, or #4238's fix only applies to a different hardware/driver/oneCCL combination than ours.
+
 ## Related public issues (closest match leads; not claimed to be confirmed duplicates)
 
-- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13"): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter confirmed upgrading from torch 2.12 to 2.13 resolved it with no settings changed. We are on **torch 2.14** and hit the identical symptom — this looks like a **regression** of a previously-fixed issue, not a brand-new bug.
+- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13" per the reporter): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter said upgrading from torch 2.12 to 2.13 resolved it. **We tested torch 2.13 directly and it still hangs for us** (see above) — so this is, at most, a partial/environment-specific fix, not a general one; we no longer frame our bug as a straightforward "regression" of #4238.
 - intel/torch-xpu-ops #5999, #5968, #6092: related FSDP/XPU hang reports (checkpoint, grad-scaler, unshard); #5968 traces one case to a Level Zero adapter timing bug, fix pending a oneAPI pin bump.
 - pytorch/pytorch #202028, #196562: a different FSDP2 `CPUOffloadPolicy` bug (DTensor RNG tracker resets CPU randomness; not a hang).
 

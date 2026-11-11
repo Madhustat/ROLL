@@ -1,0 +1,30 @@
+rank 0 pid=2484710 ZE_AFFINITY_MASK=0 device=Intel(R) Arc(TM) Pro B70 Graphics
+rank 0 23:47:21 STAGE init_process_group 0.9s xpu_alloc_MiB=0
+rank 0 23:47:21 STAGE before_model_construct 0.9s xpu_alloc_MiB=0
+Loading weights:   0%|          | 0/311 [00:00<?, ?it/s]Loading weights: 100%|██████████| 311/311 [00:00<00:00, 5649.69it/s]
+rank 0 23:47:22 STAGE after_model_construct 1.8s xpu_alloc_MiB=0
+rank 0 params=596049920 tensors=311 bytes=1503264768 tied=True shared_storage_keys=2
+rank 0 23:47:22 STAGE before_fully_shard 1.8s xpu_alloc_MiB=0
+rank 0 23:47:23 STAGE after_fully_shard 2.7s xpu_alloc_MiB=0
+rank 0 23:47:23 STAGE before_set_model_state_dict 3.0s xpu_alloc_MiB=0
+2026:11:10-23:47:23:2484710 |CCL_WARN| did not find MPI-launcher specific variables, switch to ATL/OFI, to force enable ATL/MPI set CCL_ATL_TRANSPORT=mpi
+2026:11:10-23:47:23:2484710 |CCL_WARN| could not get local_idx/count from environment variables, trying to get them from ATL
+2026:11:10-23:47:24:2484710:[0] |CCL_WARN| comm_dev_uuids is not sub-vector of node_dev_uuids, comm_dev_uuids size 2, node_dev_uuids size 1, this may happen due to narrow device affinity mask (0)
+2026:11:10-23:47:24:2484710:[0] |CCL_WARN| number of result device uuids does not match number of ranks per host, result size 1, host_rank_info_vec size 2, this may happen due to narrow device affinity mask (0)
+Timeout (0:02:00)!
+Thread 0x00007c1ed27fc6c0 (most recent call first):
+  File "/usr/lib/python3.12/threading.py", line 359 in wait
+  File "/usr/lib/python3.12/threading.py", line 655 in wait
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/tqdm/_monitor.py", line 69 in run
+  File "/usr/lib/python3.12/threading.py", line 1073 in _bootstrap_inner
+  File "/usr/lib/python3.12/threading.py", line 1030 in _bootstrap
+
+Thread 0x00007c2031243ac0 (most recent call first):
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/torch/distributed/_state_dict_utils.py", line 636 in _distribute_tensors
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/torch/distributed/_state_dict_utils.py", line 595 in _broadcast_tensors
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/torch/distributed/_state_dict_utils.py", line 681 in _broadcast_state_dict
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/torch/distributed/checkpoint/state_dict.py", line 609 in _load_model_state_dict
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124 in decorate_context
+  File "/madhu_Roll/stage1_20261102/venv_torch213_xpu/lib/python3.12/site-packages/torch/distributed/checkpoint/state_dict.py", line 1435 in set_model_state_dict
+  File "/madhu_Roll/stage1_20261102/torch213_test/./repro.py", line 39 in <module>
+EXIT rc=124
