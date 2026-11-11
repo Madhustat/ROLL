@@ -69,12 +69,12 @@ With one rank there is no inter-rank broadcast, so the failing condition was nev
 
 PyTorch 2.14.0+xpu (git `08187d9e0fba`); XCCL built in (no `oneccl-bind-pt`); oneCCL runtime 2022.0.0 preloaded (pip `oneccl` 2022.1.2 overridden); `intel-sycl-rt` 2026.1.1; NEO 26.31.39395.14 (driver `1.17.39395+14`); Level Zero loader 1.32; Ubuntu 24.04.2, kernel 7.0.0-42. devctl: NEO 26.14, loader 1.28.2, kernel 7.0.0-38, same venv recipe. The stock `intel/pytorch:xpu-2.11.0` image (PyTorch 2.11.0+xpu, oneCCL 2021.17.2) was tried as a matched stack but could not complete even a plain two-process XCCL broadcast in our Docker set-up: inconclusive.
 
-## 8. Related public issues (related evidence, not claimed to be the same root cause)
+## 8. Related public issues (closest match leads; not claimed to be confirmed duplicates)
 
-- intel/torch-xpu-ops **#5999**: FSDP multi-process tests hang until the 300 s harness timeout (duplicate of #5968).
-- intel/torch-xpu-ops **#5968**: FSDP checkpoint / grad-scaler / unshard cases time out; label `dependency component: Level_Zero`; traced to a UR Level Zero adapter abort fixed upstream, awaiting a oneAPI pin bump.
-- intel/torch-xpu-ops **#6092**: FSDP unshard and backward-reshard multi-process tests hang (regression).
-- pytorch/pytorch **#202028**, **#196562**: FSDP2 `CPUOffloadPolicy` problems (DTensor RNG tracker on CPU tensors; `trunc_normal_` hang on 2.13).
+- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13"): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter confirmed upgrading from torch 2.12 to 2.13 resolved it with no settings changed. We are on **torch 2.14** and hit the identical symptom — this looks like a **regression** of a previously-fixed issue, not a brand-new bug. (Note: this repro used CPU offload, matching test 13/`full`; it is not confirmed to explain the separate, non-offload hang seen in `lora`/`cp`/`cp_rmpad` at higher rank counts — see section 13 below.)
+- intel/torch-xpu-ops #5999, #5968, #6092: related FSDP/XPU hang reports (checkpoint, grad-scaler, unshard); #5968 traces one case to a Level Zero adapter timing bug, fix pending a oneAPI pin bump.
+- pytorch/pytorch #202028, #196562: a different FSDP2 `CPUOffloadPolicy` bug (DTensor RNG tracker resets CPU randomness; not a hang).
+
 
 ## 9. Ownership recommendation
 
@@ -97,3 +97,17 @@ Not a ROLL failure. The offload-disabled run is not presented as the original te
 ## 12. CRI
 
 Not run (team cap 4 CRI cards, node availability). Plan if 2 CRI GPUs become available: the minimal reproducer only, 3 repetitions, same conditions; interpretation per the plan (CRI pass + B60 fail → BMG/driver/Level Zero path; both fail → shared PyTorch FSDP2/XCCL path).
+
+## 13. `lora` (no CPU offload) also hangs at higher rank counts — a separate finding
+
+`lora` (`offload_policy: False`) is not subject to the bug above, since it never does CPU offload. It was tested directly on devctl B60, upstream code path (workarounds off), same 2-XPU-style device-count-only patch methodology:
+
+| GPUs | Result |
+|---|---|
+| 2 (B70 local, 3 runs) | pass, pass, pass |
+| 2 (B60 devctl, 1 run) | pass |
+| 5 (B60 devctl, 1 run) | **hang** (900 s) |
+| 8 (B60 devctl, 1 run) | **hang** (900 s) |
+
+This matches the separate, rank-count-dependent oneCCL/XCCL broadcast hang found earlier with a bare (non-offload) reproducer (0/10 hangs at 2 ranks, 2/10 at 4, 4-6/10 at 8; see `ONECCL_BCAST_HANG_REPORT_20261108.md`). No public issue has been confirmed to match this non-offload case specifically; #4238 above is the closest related report but its repro required CPU offload, so it is not cited as covering this case. One caveat: 5 is not a power of 2, so FSDP pads to shard unevenly across 5 ranks — a less-common code path that has not been isolated from "more ranks" as the cause with only one data point.
+

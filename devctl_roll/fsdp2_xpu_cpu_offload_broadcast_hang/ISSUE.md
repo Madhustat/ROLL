@@ -1,8 +1,8 @@
-Title: [FSDP2][XPU] set_model_state_dict with CPUOffloadPolicy and broadcast_from_rank0=True hangs over XCCL
+Title: [FSDP2][XPU][Regression?] set_model_state_dict with CPUOffloadPolicy and broadcast_from_rank0=True hangs over XCCL on torch 2.14 (possible regression of #4238, closed as fixed in 2.13)
 
 ## Summary
 
-Loading an FSDP2-sharded model with `fully_shard(..., offload_policy=CPUOffloadPolicy())` and then `set_model_state_dict(model, full_state, StateDictOptions(full_state_dict=True, cpu_offload=True, broadcast_from_rank0=True))` hangs on Intel XPU over XCCL with 2 ranks. Deterministic: 3 of 3 runs. PyTorch only; no ROLL, no Ray. The same model and the same collective complete when either CPU offload or the rank-0 broadcast is removed.
+Loading an FSDP2-sharded model with `fully_shard(..., offload_policy=CPUOffloadPolicy())` and then `set_model_state_dict(model, full_state, StateDictOptions(full_state_dict=True, cpu_offload=True, broadcast_from_rank0=True))` hangs on Intel XPU over XCCL with 2 ranks. Deterministic: 3 of 3 runs. PyTorch only; no ROLL, no Ray. The same model and the same collective complete when either CPU offload or the rank-0 broadcast is removed. This closely matches a previously-reported, **closed** issue on the same hardware class (#4238, "fixed in PyTorch 2.13") — we reproduce the identical symptom on PyTorch 2.14, which suggests a regression rather than a new defect.
 
 ## Environment
 
@@ -55,12 +55,12 @@ The wait is in the per-tensor copy of the broadcast result into the CPU-offloade
 
 An earlier run of a Qwen2.5-1.5B pipeline with CPU offload that passed used a single FSDP2 rank, so it executed no inter-rank broadcast and is not a counter-example.
 
-## Related public issues (related FSDP/XPU evidence; not claimed to be the same root cause)
+## Related public issues (closest match leads; not claimed to be confirmed duplicates)
 
-- intel/torch-xpu-ops #5999: multi-process FSDP tests hang until the 300 s harness timeout.
-- intel/torch-xpu-ops #5968: FSDP checkpoint / CPU-offload / unshard tests time out; Level Zero dependency.
-- intel/torch-xpu-ops #6092: FSDP2 unshard and backward-reshard multi-process tests hang.
-- pytorch/pytorch #202028, #196562: FSDP2 `CPUOffloadPolicy` issues (DTensor RNG tracker on CPU tensors; `trunc_normal_` hang).
+- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13"): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter confirmed upgrading from torch 2.12 to 2.13 resolved it with no settings changed. We are on **torch 2.14** and hit the identical symptom — this looks like a **regression** of a previously-fixed issue, not a brand-new bug.
+- intel/torch-xpu-ops #5999, #5968, #6092: related FSDP/XPU hang reports (checkpoint, grad-scaler, unshard); #5968 traces one case to a Level Zero adapter timing bug, fix pending a oneAPI pin bump.
+- pytorch/pytorch #202028, #196562: a different FSDP2 `CPUOffloadPolicy` bug (DTensor RNG tracker resets CPU randomness; not a hang).
+
 
 ## Attachments
 

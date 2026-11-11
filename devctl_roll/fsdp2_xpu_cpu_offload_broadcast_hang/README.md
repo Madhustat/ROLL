@@ -78,12 +78,12 @@ Note on bucket size: `_broadcast_tensors` calls `dist._broadcast_coalesced(pg, t
 | Qwen2.5-0.5B-Instruct (494 M, tied) | hang (1 run) |
 | Qwen2.5-1.5B-Instruct (1544 M, tied) | hang (1 run, 300 s; live stacks captured, see below) |
 
-## Related public issues (related evidence, not claimed to be the same root cause)
+## Related public issues (closest match leads; not claimed to be confirmed duplicates)
 
-- intel/torch-xpu-ops #5999: FSDP tests hang until the 300 s distributed-harness timeout (marked duplicate of #5968).
-- intel/torch-xpu-ops #5968: xpu_distributed FSDP checkpoint / grad-scaler / unshard cases time out; label `dependency component: Level_Zero`; traced to a UR Level Zero adapter abort fixed upstream, awaiting a oneAPI pin bump.
-- intel/torch-xpu-ops #6092: FSDP unshard and backward-reshard multi-process tests hang (regression).
-- pytorch/pytorch #202028 and #196562: FSDP2 `CPUOffloadPolicy` correctness problems (DTensor RNG tracker applied to CPU tensors; `trunc_normal_` hang on 2.13).
+- **intel/torch-xpu-ops #4238** (closed, "fixed in PyTorch 2.13"): identical repro shape to ours — FSDP `sync_module_states`/`set_model_state_dict` hangs at the init broadcast with CPU offload enabled, on the **same hardware class (2x Arc Pro B70)**, stalling inside a Level Zero driver memcpy during the broadcast. The reporter confirmed upgrading from torch 2.12 to 2.13 resolved it with no settings changed. We are on **torch 2.14** and hit the identical symptom — this looks like a **regression** of a previously-fixed issue, not a brand-new bug.
+- intel/torch-xpu-ops #5999, #5968, #6092: related FSDP/XPU hang reports (checkpoint, grad-scaler, unshard); #5968 traces one case to a Level Zero adapter timing bug, fix pending a oneAPI pin bump.
+- pytorch/pytorch #202028, #196562: a different FSDP2 `CPUOffloadPolicy` bug (DTensor RNG tracker resets CPU randomness; not a hang).
+
 
 ## Files
 
