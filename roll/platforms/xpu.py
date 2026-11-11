@@ -1,3 +1,6 @@
+import os
+import socket
+
 import torch
 
 from .platform import Platform
@@ -5,6 +8,9 @@ from ..utils.logging import get_logger
 
 
 logger = get_logger()
+
+ASSIGNED_XPU_IDS_ENV = "ROLL_ASSIGNED_XPU_IDS"
+PRIMARY_XPU_ID_ENV = "ROLL_PRIMARY_XPU_ID"
 
 
 class XpuPlatform(Platform):
@@ -46,6 +52,44 @@ class XpuPlatform(Platform):
             "RAY_CGRAPH_get_timeout": "600",
         }
         return env_vars
+
+    @classmethod
+    def update_env_vars_for_visible_devices(cls, env_vars: dict, gpu_ranks: list) -> None:
+        env_vars.update(
+            {
+                ASSIGNED_XPU_IDS_ENV: ",".join(map(str, gpu_ranks)),
+                PRIMARY_XPU_ID_ENV: str(gpu_ranks[0]),
+                cls.ray_experimental_noset: "1",
+            }
+        )
+
+    @classmethod
+    def get_visible_gpus(cls) -> list:
+        return os.environ.get(ASSIGNED_XPU_IDS_ENV, "").split(",")
+
+    @classmethod
+    def select_assigned_devices(cls) -> None:
+        primary = os.environ.get(PRIMARY_XPU_ID_ENV)
+        if primary is None:
+            return
+        if os.environ.get(cls.device_control_env_var):
+            raise RuntimeError(
+                f"{cls.device_control_env_var}={os.environ[cls.device_control_env_var]} narrows XPU visibility, "
+                f"but {PRIMARY_XPU_ID_ENV}={primary} requires every node-local XPU to be visible"
+            )
+        device = int(primary)
+        visible = torch.xpu.device_count()
+        if device >= visible:
+            raise RuntimeError(f"Ray assigned XPU {device}, but this process sees only {visible} XPUs")
+        torch.xpu.set_device(device)
+        current = torch.xpu.current_device()
+        if current != device:
+            raise RuntimeError(f"torch.xpu.set_device({device}) left the current XPU at {current}")
+        logger.info(
+            f"XPU placement: host={socket.gethostname()} pid={os.getpid()} rank={os.environ.get('RANK')} "
+            f"assigned={os.environ.get(ASSIGNED_XPU_IDS_ENV)} current_device={current} "
+            f"uuid={torch.xpu.get_device_properties(current).uuid}"
+        )
 
     @classmethod
     def get_vllm_worker_class(cls):

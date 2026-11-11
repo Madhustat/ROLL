@@ -166,6 +166,14 @@ class Platform:
         return []
 
     @classmethod
+    def select_assigned_devices(cls) -> None:
+        return
+
+    @classmethod
+    def get_vllm_device_kwargs(cls) -> dict:
+        return {}
+
+    @classmethod
     def get_vllm_worker_class(cls):
         """Return the custom vLLM WorkerWrapper class used in Ray."""
         raise NotImplementedError
