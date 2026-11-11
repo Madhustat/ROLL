@@ -1,0 +1,29 @@
+diff --git a/tests/distributed/strategy/log_probs/log_probs_fsdp_lora_config.yaml b/tests/distributed/strategy/log_probs/log_probs_fsdp_lora_config.yaml
+index 6721a71..f06a6d6 100644
+--- a/tests/distributed/strategy/log_probs/log_probs_fsdp_lora_config.yaml
++++ b/tests/distributed/strategy/log_probs/log_probs_fsdp_lora_config.yaml
+@@ -55,13 +55,13 @@ actor_train:
+       reduce_dtype: fp32
+       reshard_after_forward: True
+       offload_policy: False
+-      fsdp_size: 8
++      fsdp_size: 5
+   checkpoint_config:
+     async_upload: False
+   offload_nccl: False
+   use_remove_padding: False
+   use_dynamic_batching_in_train: False
+-  device_mapping: list(range(0,8))
++  device_mapping: list(range(0,5))
+   infer_batch_size: 2
+ 
+ actor_infer:
+@@ -96,7 +96,7 @@ actor_infer:
+       max_num_seqs: 1024
+       max_num_batched_tokens: 8096
+       enable_prefix_caching: true
+-  device_mapping: list(range(0,8))
++  device_mapping: list(range(0,5))
+   infer_batch_size: 2
+ 
+ reference:
