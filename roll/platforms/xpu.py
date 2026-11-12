@@ -92,6 +92,18 @@ class XpuPlatform(Platform):
         )
 
     @classmethod
+    def get_vllm_device_kwargs(cls) -> dict:
+        assigned = os.environ.get(ASSIGNED_XPU_IDS_ENV)
+        if not assigned:
+            return {}
+        import vllm
+        from packaging.version import Version
+
+        if Version(vllm.__version__) < Version("0.31.0"):
+            raise RuntimeError(f"vLLM {vllm.__version__} ignores device_ids on XPU; vLLM >= 0.31 is required")
+        return {"device_ids": [int(i) for i in assigned.split(",")]}
+
+    @classmethod
     def get_vllm_worker_class(cls):
         try:
             from vllm.v1.worker.xpu_worker import XPUWorker
