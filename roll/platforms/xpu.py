@@ -59,6 +59,7 @@ class XpuPlatform(Platform):
             {
                 ASSIGNED_XPU_IDS_ENV: ",".join(map(str, gpu_ranks)),
                 PRIMARY_XPU_ID_ENV: str(gpu_ranks[0]),
+                "LOCAL_RANK": str(gpu_ranks[0]),
                 cls.ray_experimental_noset: "1",
             }
         )
@@ -77,6 +78,8 @@ class XpuPlatform(Platform):
                 f"{cls.device_control_env_var}={os.environ[cls.device_control_env_var]} narrows XPU visibility, "
                 f"but {PRIMARY_XPU_ID_ENV}={primary} requires every node-local XPU to be visible"
             )
+        if os.environ.get("LOCAL_RANK", primary) != primary:
+            raise RuntimeError(f"LOCAL_RANK={os.environ['LOCAL_RANK']} differs from {PRIMARY_XPU_ID_ENV}={primary}")
         device = int(primary)
         visible = torch.xpu.device_count()
         if device >= visible:
