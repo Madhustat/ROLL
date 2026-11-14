@@ -1,0 +1,71 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: xpu_ex2_dpo_3b_v4
+seed: 42
+logging_dir: __OUT_DIR__/output/logs
+output_dir: __OUT_DIR__/output
+system_envs:
+  USE_MODELSCOPE: '0'
+checkpoint_config:
+  type: file_system
+  output_dir: __OUT_DIR__/checkpoints/xpu_ex2_dpo_3b
+track_with: tensorboard
+tracker_kwargs:
+  log_dir: __OUT_DIR__/tensorboard/xpu_ex2_dpo_3b
+max_steps: 4
+save_steps: 4
+logging_steps: 1
+eval_steps: 2
+resume_from_checkpoint: false
+sequence_length: 512
+num_nodes: 1
+num_gpus_per_node: 2
+pretrain: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+ipo: false
+beta: 0.1
+label_smoothing: 0.0
+chosen_key: chosen
+rejected_key: rejected
+global_template: qwen2_5
+validation:
+  data_args:
+    file_name: __DATA_DIR__/comparison_gpt4_data_zh_2000.json
+actor_train:
+  model_args:
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: null
+  training_args:
+    lr_scheduler_type: constant
+    learning_rate: 1.0e-06
+    weight_decay: 0
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    warmup_steps: 0
+    num_train_epochs: 10
+  data_args:
+    file_name:
+    - __DATA_DIR__/comparison_gpt4_data_zh_2000.json
+    dataset_dir: data
+    preprocessing_num_workers: 1
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+reference:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+    model_type: null
+  strategy_args:
+    strategy_name: fsdp2_infer
+    strategy_config:
+      reshard_after_forward: true
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1

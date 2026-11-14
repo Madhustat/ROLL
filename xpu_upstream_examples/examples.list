@@ -1,0 +1,22 @@
+# name | launcher (examples/) | config | kind (rlvr|dpo|sft) | expected steps | time limit s | stall limit s
+ex_grpo|start_rlvr_pipeline.py|ex_grpo|rlvr|4|2400|600
+ex_gspo|start_rlvr_pipeline.py|ex_gspo|rlvr|4|2400|600
+ex_reinforce_pp|start_rlvr_pipeline.py|ex_reinforce_pp|rlvr|4|2400|600
+ex_ppo|start_rlvr_pipeline.py|ex_ppo|rlvr|4|2400|600
+ex_total_rl_options|start_rlvr_pipeline.py|ex_total_rl_options|rlvr|4|2400|600
+q25_rlvr_config|start_rlvr_pipeline.py|q25_rlvr_config|rlvr|4|2400|600
+q25_rlvr_8gpus|start_rlvr_pipeline.py|q25_rlvr_8gpus|rlvr|4|2400|600
+q25_llm_as_judge|start_rlvr_pipeline.py|q25_llm_as_judge|rlvr|4|2400|600
+q25_seperate|start_rlvr_pipeline.py|q25_seperate|rlvr|4|2400|600
+q25_offpolicy|start_rlvr_pipeline.py|q25_offpolicy|rlvr|4|2400|600
+ex_raft_pp|start_rlvr_pipeline.py|ex_raft_pp|rlvr|4|3000|900
+q25_async|start_rlvr_pipeline.py|q25_async|rlvr|4|3000|900
+q3_rlvr_fsdp2|start_rlvr_pipeline.py|q3_rlvr_fsdp2|rlvr|4|3600|900
+q3_rlvr_fsdp2_wo_offload|start_rlvr_pipeline.py|q3_rlvr_fsdp2_wo_offload|rlvr|4|3600|900
+dpo_3b|start_dpo_pipeline.py|dpo_3b_v4|dpo|16|3600|900
+sft_7b_10steps|start_sft_pipeline.py|sft_7b_10steps|sft|10|1200|600
+ex_topr_small|start_rlvr_pipeline.py|ex_topr_small|rlvr|4|3000|900
+q25_dynamic_batching|start_rlvr_pipeline.py|q25_dynamic_batching|rlvr|4|3000|900
+q25_fsdp2_sp2_ga4|start_rlvr_pipeline.py|q25_fsdp2_sp2_ga4|rlvr|4|3000|900
+q25_fsdp2_sp2_ga4_small|start_rlvr_pipeline.py|q25_fsdp2_sp2_ga4_small|rlvr|4|3000|900
+q25_fsdp2_sp2_ga4_1k|start_rlvr_pipeline.py|q25_fsdp2_sp2_ga4_1k|rlvr|4|3600|900

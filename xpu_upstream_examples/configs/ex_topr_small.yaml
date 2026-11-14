@@ -1,0 +1,230 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: xpu_ex2_ex_topr_small
+seed: 42
+logging_dir: __OUT_DIR__/output/logs
+output_dir: __OUT_DIR__/output
+system_envs:
+  USE_MODELSCOPE: '0'
+checkpoint_config:
+  type: file_system
+  output_dir: __OUT_DIR__/checkpoints/xpu_ex2_ex_topr
+track_with: tensorboard
+tracker_kwargs:
+  log_dir: __OUT_DIR__/tensorboard/xpu_ex2_ex_topr
+num_gpus_per_node: 2
+max_steps: 4
+save_steps: 4
+logging_steps: 1
+eval_steps: 2
+resume_from_checkpoint: false
+rl_loss_coef: 0.0
+rollout_batch_size: 16
+prompt_length: 512
+response_length: 512
+adv_estimator: gae
+num_return_sequences_in_group: 1
+ppo_epochs: 1
+use_kl_loss: true
+kl_loss_coef: 0.001
+loss_agg_mode: seq-mean-token-mean
+whiten_advantages: true
+advantage_clip: 2.0
+dual_clip_loss: true
+lambd: 0.95
+gamma: 1
+pg_clip: 0.2
+kl_penalty: kl
+init_kl_coef: 0.2
+kl_horizon: 10000
+add_token_level_kl: false
+reward_shift: false
+reward_scale: false
+pretrain: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+reward_pretrain: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+validation:
+  data_args:
+    template: qwen2_5
+    file_name:
+    - data/math_benchmarks.jsonl
+  generating_args:
+    max_new_tokens: ${response_length}
+    top_p: 0.6
+    top_k: 50
+    num_beams: 1
+    temperature: 0.6
+    num_return_sequences: 1
+actor_train:
+  model_args:
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: null
+  training_args:
+    learning_rate: 1.0e-06
+    weight_decay: 0
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    warmup_steps: 0
+    num_train_epochs: 50
+  data_args:
+    template: qwen2_5
+    file_name:
+    - data/code_KodCode_data.jsonl
+    - data/llm_judge_Multi-subject-RLVR_deal_new.jsonl
+    - data/math_deepmath_deal.jsonl
+    - data/general_ifeval_train_deal.jsonl
+    - data/general_CrossThink-QA_deal.jsonl
+    domain_interleave_probs:
+      math_rule: 0.4
+      code_sandbox: 0.3
+      llm_judge: 0.1
+      crossthinkqa: 0.1
+      ifeval: 0.1
+    dataset_dir: data
+    messages: messages
+    interleave_probs: '1.0'
+    preprocessing_num_workers: 4
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+  worker_cls: roll.pipeline.rlvr.actor_pg_worker.ActorPGWorker
+  pg_variant: topr
+actor_infer:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  generating_args:
+    max_new_tokens: ${response_length}
+    top_p: 0.99
+    top_k: 100
+    num_beams: 1
+    temperature: 0.99
+    num_return_sequences: ${num_return_sequences_in_group}
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: vllm
+    strategy_config:
+      gpu_memory_utilization: 0.4
+      block_size: 16
+      max_model_len: 1024
+      load_format: auto
+  device_mapping: list(range(1,2))
+  infer_batch_size: 1
+reference:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+    model_type: null
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: fsdp2_infer
+    strategy_config:
+      reshard_after_forward: true
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+rewards:
+  crossthinkqa:
+    worker_cls: roll.pipeline.rlvr.rewards.crossthinkqa_rule_reward_worker.CrossThinkQARuleRewardWorker
+    reward_type: soft
+    response_length_penalty_coef: 0.0
+    model_args:
+      model_name_or_path: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+    data_args:
+      template: qwen2_5
+    tag_included:
+    - crossthinkqa
+    world_size: 1
+    infer_batch_size: 4
+  ifeval:
+    worker_cls: roll.pipeline.rlvr.rewards.ifeval_rule_reward_worker.GeneralRuleRewardWorker
+    reward_type: soft
+    model_args:
+      model_name_or_path: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+    data_args:
+      template: qwen2_5
+    tag_included:
+    - ifeval
+    world_size: 1
+    infer_batch_size: 4
+  math_rule:
+    worker_cls: roll.pipeline.rlvr.rewards.math_rule_reward_worker.MathRuleRewardWorker
+    model_args:
+      model_name_or_path: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+    data_args:
+      template: qwen2_5
+    tag_included:
+    - deepmath_103k
+    - aime
+    world_size: 1
+    infer_batch_size: 1
+  code_sandbox:
+    use_local: true
+    worker_cls: roll.pipeline.rlvr.rewards.code_sandbox_reward_worker.CodeSandboxRewardWorker
+    tag_included:
+    - KodCode
+    model_args:
+      model_name_or_path: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+    data_args:
+      template: qwen2_5
+    world_size: 1
+    infer_batch_size: 1
+  llm_judge:
+    worker_cls: roll.pipeline.rlvr.rewards.llm_judge_reward_worker.LLMJudgeRewardWorker
+    judge_prompt: Qwen2.5-7B-Instruct-RLVR-prompt
+    judge_model_type: inference
+    tag_included:
+    - RLVR
+    model_args:
+      model_name_or_path: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+      attn_implementation: sdpa
+      disable_gradient_checkpointing: true
+      dtype: bf16
+      model_type: trl
+    generating_args:
+      max_new_tokens: 100
+      top_p: 0.8
+      top_k: 50
+      num_beams: 1
+      temperature: 0.8
+      num_return_sequences: 1
+    data_args:
+      template: qwen2_5
+    strategy_args:
+      strategy_name: hf_infer
+      strategy_config: null
+    device_mapping: list(range(1,2))
+    infer_batch_size: 4
+num_nodes: 1
+critic:
+  model_args:
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: trl
+  training_args:
+    learning_rate: 1.0e-05
+    weight_decay: 0
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    warmup_steps: 0
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+      wrap_policy:
+        transformer_layer_cls_to_wrap:
+        - Qwen2DecoderLayer
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1

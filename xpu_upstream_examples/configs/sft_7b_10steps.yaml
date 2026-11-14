@@ -1,0 +1,54 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: xpu_ex2_sft_7b_10steps
+seed: 42
+logging_dir: __OUT_DIR__/output/logs
+output_dir: __OUT_DIR__/output
+system_envs:
+  USE_MODELSCOPE: '0'
+track_with: tensorboard
+tracker_kwargs:
+  log_dir: __OUT_DIR__/tensorboard/xpu_ex2_sft_7b
+num_gpus_per_node: 2
+save_steps: 4
+logging_steps: 1
+eval_steps: 5
+resume_from_checkpoint: false
+sequence_length: 2048
+pretrain: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+prompt_key: instruction
+query_key: input
+response_key: output
+validation:
+  data_args:
+    file_name: __DATA_DIR__/code_alpaca/code_alpaca_80.json
+    template: qwen2_5
+sft_train:
+  model_args:
+    dtype: bf16
+  training_args:
+    num_train_epochs: 1
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    learning_rate: 5.0e-06
+    warmup_steps: 0
+  data_args:
+    file_name: __DATA_DIR__/code_alpaca/code_alpaca_80.json
+    template: qwen2_5
+    preprocessing_num_workers: 4
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  use_sequence_packing: true
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+checkpoint_config:
+  type: file_system
+  output_dir: __OUT_DIR__/checkpoints/xpu_ex2_sft_7b
+num_nodes: 1
+max_steps: 10

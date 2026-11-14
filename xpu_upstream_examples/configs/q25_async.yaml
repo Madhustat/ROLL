@@ -1,0 +1,122 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: xpu_ex2_q25_async
+seed: 42
+logging_dir: __OUT_DIR__/output/logs
+output_dir: __OUT_DIR__/output
+system_envs:
+  USE_MODELSCOPE: '0'
+checkpoint_config:
+  type: file_system
+  output_dir: __OUT_DIR__/checkpoints/xpu_ex2_q25_async
+num_gpus_per_node: 2
+max_steps: 4
+save_steps: 4
+logging_steps: 1
+resume_from_checkpoint: false
+rollout_batch_size: 8
+prompt_length: 2048
+response_length: 8192
+async_generation_ratio: 1
+is_num_return_sequences_expand: true
+num_return_sequences_in_group: 4
+ppo_epochs: 1
+adv_estimator: reinforce
+value_clip: 0.5
+reward_clip: 10
+advantage_clip: 2.0
+dual_clip_loss: true
+norm_mean_type: null
+norm_std_type: null
+max_len_mask: true
+difficulty_mask: true
+difficulty_low_threshold: 0.1
+difficulty_high_threshold: 0.95
+error_max_len_clip: false
+difficulty_loss_weight: false
+length_loss_weight: false
+add_token_level_kl: false
+whiten_advantages: true
+pretrain: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+reward_pretrain: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+actor_train:
+  model_args:
+    dtype: bf16
+    model_type: null
+  training_args:
+    learning_rate: 1.0e-06
+    weight_decay: 0
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 8
+    warmup_steps: 0
+    num_train_epochs: 5
+  data_args:
+    template: qwen2_5
+    file_name:
+    - data/math_deepmath_deal.jsonl
+    domain_interleave_probs:
+      math_rule: 1.0
+    dataset_dir: data
+    messages: messages
+    interleave_probs: '1.0'
+    preprocessing_num_workers: 4
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+actor_infer:
+  model_args:
+    dtype: fp16
+  generating_args:
+    max_new_tokens: ${response_length}
+    top_p: 0.99
+    top_k: 100
+    num_beams: 1
+    temperature: 0.99
+    num_return_sequences: ${num_return_sequences_in_group}
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: vllm
+    strategy_config:
+      gpu_memory_utilization: 0.4
+      block_size: 16
+      max_model_len: 10240
+      load_format: auto
+  device_mapping: list(range(1,2))
+  infer_batch_size: 1
+reference:
+  model_args:
+    dtype: bf16
+    model_type: null
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: fsdp2_infer
+    strategy_config:
+      reshard_after_forward: true
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+rewards:
+  math_rule:
+    worker_cls: roll.pipeline.rlvr.rewards.math_rule_reward_worker.MathRuleRewardWorker
+    model_args:
+      model_name_or_path: __MODELS_DIR__/Qwen2.5-0.5B-Instruct
+    data_args:
+      template: qwen2_5
+    tag_included:
+    - deepmath_103k
+    - aime
+    world_size: 1
+    infer_batch_size: 1
+track_with: tensorboard
+tracker_kwargs:
+  log_dir: __OUT_DIR__/tensorboard/xpu_ex2_q25_async
+num_nodes: 1
+eval_steps: 2
