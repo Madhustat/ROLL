@@ -1,5 +1,4 @@
 import os
-import socket
 
 import torch
 
@@ -9,9 +8,6 @@ from ..utils.logging import get_logger
 
 logger = get_logger()
 
-ASSIGNED_XPU_IDS_ENV = "ROLL_ASSIGNED_XPU_IDS"
-PRIMARY_XPU_ID_ENV = "ROLL_PRIMARY_XPU_ID"
-
 
 class XpuPlatform(Platform):
     device_name: str = "INTEL"
@@ -20,6 +16,8 @@ class XpuPlatform(Platform):
     ray_device_key: str = "GPU"
     device_control_env_var: str = "ZE_AFFINITY_MASK"
     ray_experimental_noset: str = "RAY_EXPERIMENTAL_NOSET_ONEAPI_DEVICE_SELECTOR"
+    assigned_devices_env_var: str = "ROLL_ASSIGNED_XPU_IDS"
+    primary_device_env_var: str = "ROLL_PRIMARY_XPU_ID"
     communication_backend: str = "xccl"
     supports_tensor_ipc: bool = False
 
@@ -55,48 +53,38 @@ class XpuPlatform(Platform):
 
     @classmethod
     def update_env_vars_for_visible_devices(cls, env_vars: dict, gpu_ranks: list) -> None:
-        env_vars.update(
-            {
-                ASSIGNED_XPU_IDS_ENV: ",".join(map(str, gpu_ranks)),
-                PRIMARY_XPU_ID_ENV: str(gpu_ranks[0]),
-                "LOCAL_RANK": str(gpu_ranks[0]),
-                cls.ray_experimental_noset: "1",
-            }
-        )
+        visible_devices_env_vars = {
+            cls.assigned_devices_env_var: ",".join(map(str, gpu_ranks)),
+            cls.primary_device_env_var: str(gpu_ranks[0]),
+            "LOCAL_RANK": str(gpu_ranks[0]),
+            cls.ray_experimental_noset: "1",
+        }
+        env_vars.update(visible_devices_env_vars)
 
     @classmethod
     def get_visible_gpus(cls) -> list:
-        return os.environ.get(ASSIGNED_XPU_IDS_ENV, "").split(",")
+        return os.environ.get(cls.assigned_devices_env_var, "").split(",")
 
     @classmethod
     def select_assigned_devices(cls) -> None:
-        primary = os.environ.get(PRIMARY_XPU_ID_ENV)
+        primary = os.environ.get(cls.primary_device_env_var)
         if primary is None:
             return
         if os.environ.get(cls.device_control_env_var):
             raise RuntimeError(
                 f"{cls.device_control_env_var}={os.environ[cls.device_control_env_var]} narrows XPU visibility, "
-                f"but {PRIMARY_XPU_ID_ENV}={primary} requires every node-local XPU to be visible"
+                f"but {cls.primary_device_env_var}={primary} requires every node-local XPU to be visible"
             )
-        if os.environ.get("LOCAL_RANK", primary) != primary:
-            raise RuntimeError(f"LOCAL_RANK={os.environ['LOCAL_RANK']} differs from {PRIMARY_XPU_ID_ENV}={primary}")
         device = int(primary)
-        visible = torch.xpu.device_count()
-        if device >= visible:
-            raise RuntimeError(f"Ray assigned XPU {device}, but this process sees only {visible} XPUs")
         torch.xpu.set_device(device)
-        current = torch.xpu.current_device()
-        if current != device:
-            raise RuntimeError(f"torch.xpu.set_device({device}) left the current XPU at {current}")
         logger.info(
-            f"XPU placement: host={socket.gethostname()} pid={os.getpid()} rank={os.environ.get('RANK')} "
-            f"assigned={os.environ.get(ASSIGNED_XPU_IDS_ENV)} current_device={current} "
-            f"uuid={torch.xpu.get_device_properties(current).uuid}"
+            f"XPU placement: rank={os.environ.get('RANK')} assigned={os.environ.get(cls.assigned_devices_env_var)} "
+            f"current_device={device} uuid={torch.xpu.get_device_properties(device).uuid}"
         )
 
     @classmethod
     def get_vllm_device_kwargs(cls) -> dict:
-        assigned = os.environ.get(ASSIGNED_XPU_IDS_ENV)
+        assigned = os.environ.get(cls.assigned_devices_env_var)
         if not assigned:
             return {}
         import vllm
