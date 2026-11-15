@@ -1,0 +1,60 @@
+# STAND-IN for the NVIDIA SFT1_fsdp2 YAML (not provided). Derived from ROLL examples/qwen3-30BA3B-sft_fsdp2/sft_config.yaml:
+# model -> local Qwen2.5-0.5B-Instruct, 8 -> 2 devices, MoE/ulysses/EP settings removed, Qwen2DecoderLayer wrap,
+# max_steps 16 / eval_steps 8 (to match the NVIDIA reference shape), local data, code_alpaca_500 = last 500 rows of 20k.
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+exp_name: "T2_SFT_1xpu"
+seed: 42
+logging_dir: ${oc.env:ROLL_WORK}/output/runs/T2_SFT_1xpu/output/logs
+output_dir: ${oc.env:ROLL_WORK}/output/runs/T2_SFT_1xpu/output
+track_with: stdout
+
+num_gpus_per_node: 2
+
+max_steps: 16
+save_steps: 1000
+logging_steps: 1
+eval_steps: 8
+resume_from_checkpoint: false
+
+sequence_length: 2048
+
+pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+
+prompt_key: instruction
+query_key: input
+response_key: output
+
+validation:
+  data_args:
+    file_name: ${oc.env:ROLL_WORK}/extra_data/code_alpaca_500.json
+    template: qwen2_5
+
+sft_train:
+  model_args:
+    dtype: bf16
+  training_args:
+    num_train_epochs: 1
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 1
+    learning_rate: 5.0e-6
+  data_args:
+    file_name: ${oc.env:ROLL_WORK}/extra_data/code_alpaca_20k.json
+    template: qwen2_5
+    preprocessing_num_workers: 4
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      fsdp_size: 1
+      offload_policy: false
+      reshard_after_forward: true
+      wrap_policy:
+        transformer_layer_cls_to_wrap:
+          - Qwen2DecoderLayer
+  use_sequence_packing: True
+  device_mapping: list(range(0,1))
+  infer_batch_size: 2

@@ -1,0 +1,75 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: xpu_offpolicy_distill_ray
+seed: 42
+logging_dir: ${oc.env:ROLL_WORK}/output/logs
+output_dir: ${oc.env:ROLL_WORK}/output
+checkpoint_config:
+  type: file_system
+  output_dir: ${oc.env:ROLL_WORK}/checkpoints/xpu_offpolicy_distill
+save_steps: 10000
+logging_steps: 1
+resume_from_checkpoint: false
+eval_steps: 10000
+student_pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+teacher_pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-1.5B-Instruct
+logits_topk: 64
+distill_loss_weight: 0.85
+kd_objective: forward_kl
+distill_on_prompt: false
+logits_transfer_backend: ray
+sequence_length: 1024
+max_grad_norm: 1.0
+question_key: question_zh
+answer_key: answer_zh
+validation:
+  data_args:
+    file_name:
+    - ${oc.env:ROLL_WORK}/data/gsm8k_zh/GSM8K_zh.json
+    template: qwen2_5
+student:
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: null
+  training_args:
+    learning_rate: 2.0e-05
+    lr_scheduler_type: constant
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 2
+    warmup_steps: 0
+    num_train_epochs: 1
+  data_args:
+    template: qwen2_5
+    file_name:
+    - ${oc.env:ROLL_WORK}/data/gsm8k_zh/GSM8K_zh.json
+    preprocessing_num_workers: 4
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  use_sequence_packing: false
+  device_mapping: list(range(0,1))
+  infer_batch_size: 2
+teacher:
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  data_args:
+    template: qwen2_5
+  training_args:
+    per_device_train_batch_size: 4
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config: null
+  use_sequence_packing: false
+  device_mapping: list(range(1,2))
+system_envs:
+  RAY_PROFILING: '0'
+max_steps: 8
