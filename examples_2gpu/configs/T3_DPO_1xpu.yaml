@@ -1,0 +1,82 @@
+# STAND-IN for the NVIDIA DPO2_fsdp2 YAML (not provided). Derived from ROLL examples/dpo_examples/qwen2.5-3B_dpo_megatron.yaml:
+# model -> local Qwen2.5-0.5B-Instruct, megatron_train/megatron_infer -> fsdp2_train/fsdp2_infer, 8 -> 2 devices,
+# 16 steps / eval every 8, per-device batch 4, warmup 0, validation = first 64 rows (full file = 36k rows), stdout tracker.
+# R2b variant: reference strategy fsdp2_infer -> hf_infer (fsdp2_infer reload failed: _local_tensor AttributeError).
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
+exp_name: "T3_DPO_1xpu"
+seed: 42
+logging_dir: ${oc.env:ROLL_WORK}/output/runs/T3_DPO_1xpu/output/logs
+output_dir: ${oc.env:ROLL_WORK}/output/runs/T3_DPO_1xpu/output
+track_with: stdout
+
+checkpoint_config:
+  type: file_system
+  output_dir: ${oc.env:ROLL_WORK}/output/runs/T3_DPO_1xpu/ckpt
+
+max_steps: 16
+save_steps: 1000
+logging_steps: 1
+eval_steps: 8
+resume_from_checkpoint: false
+
+sequence_length: 512
+
+num_nodes: 1
+num_gpus_per_node: 2
+
+pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+
+ipo: false
+beta: 0.1
+label_smoothing: 0.0
+
+chosen_key: chosen
+rejected_key: rejected
+
+global_template: qwen2_5
+
+validation:
+  data_args:
+    file_name: ${oc.env:ROLL_WORK}/extra_data/comparison_gpt4_val64.json
+
+actor_train:
+  model_args:
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: ~
+  training_args:
+    lr_scheduler_type: constant
+    learning_rate: 1.0e-6
+    weight_decay: 0
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 1
+    warmup_steps: 0
+    num_train_epochs: 10
+  data_args:
+    file_name:
+      - ${oc.env:ROLL_WORK}/extra_data/comparison_gpt4_data_zh.json
+    preprocessing_num_workers: 1
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      fsdp_size: 1
+      offload_policy: false
+      reshard_after_forward: true
+  device_mapping: list(range(0,1))
+  infer_batch_size: 4
+
+reference:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+    model_type: ~
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config: ~
+  device_mapping: list(range(0,1))
+  infer_batch_size: 4
