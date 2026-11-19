@@ -81,7 +81,6 @@ def postprocess_paused_data(pre_data, data: DataProto, sequence_length, prompt_l
             data.meta_info["pre_routed_experts"] = torch.cat([pre_routed_experts, cur_routed_experts], dim=0)
         else:
             data.meta_info["pre_routed_experts"] = cur_routed_experts
-    new_batch["routed_experts"] = pre_data.batch.get("pre_routed_experts")
 
     init_attention_mask = pre_data.batch.get("init_attention_mask", pre_data.batch["attention_mask"])
     new_batch["init_attention_mask"] = init_attention_mask
