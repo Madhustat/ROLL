@@ -1,0 +1,78 @@
+# name | launcher (examples/) | config | kind | expected steps | time limit s | stall limit s | flag
+# Base = Qwen2.5-0.5B GRPO, train+ref XPU0, vLLM XPU1.
+# --- separated layout: train+ref on XPU 0, vLLM on XPU 1 ---
+base|start_rlvr_pipeline.py|rlvr_grpo_qwen2.5-0.5b_2xpu_bringup|rlvr|4|1800|420
+W1b_sync_on|start_rlvr_pipeline.py|v_W1b|rlvr|6|1800|420
+W2b_sync_off|start_rlvr_pipeline.py|v_W2b|rlvr|6|1800|420
+G1_async|start_rlvr_pipeline.py|v_G1|rlvr|4|1800|420
+G2_async_is|start_rlvr_pipeline.py|v_G2|rlvr|4|1800|420
+D1_reinforce|start_rlvr_pipeline.py|v_D1|rlvr|4|1800|420
+D3_seq_is|start_rlvr_pipeline.py|v_D3|rlvr|4|1800|420
+D6_token_mean|start_rlvr_pipeline.py|v_D6|rlvr|4|1800|420
+D7_ppo_epochs2|start_rlvr_pipeline.py|v_D7|rlvr|4|2400|420
+E1_whiten|start_rlvr_pipeline.py|v_E1|rlvr|4|1800|420
+E3|start_rlvr_pipeline.py|v_E3|rlvr|4|1800|420
+E5|start_rlvr_pipeline.py|v_E5|rlvr|4|2400|420
+F1|start_rlvr_pipeline.py|v_F1|rlvr|4|2400|420
+F2|start_rlvr_pipeline.py|v_F2|rlvr|4|2400|420
+H1|start_rlvr_pipeline.py|v_H1|rlvr|4|1800|420
+RPP_reinforce_pp|start_rlvr_pipeline.py|v_RPP|rlvr|4|1800|420
+PG_topr|start_rlvr_pipeline.py|v_PG_topr|rlvr|4|1800|420
+PG_tis|start_rlvr_pipeline.py|v_PG_tis|rlvr|4|1800|420
+PG_cispo|start_rlvr_pipeline.py|v_PG_cispo|rlvr|4|1800|420
+PG_kimi15|start_rlvr_pipeline.py|v_PG_kimi15|rlvr|4|1800|420
+PPO_gae_critic|start_rlvr_pipeline.py|v_PPO|rlvr|4|1800|420
+LPPO_liteppo|start_rlvr_pipeline.py|v_LPPO|rlvr|4|1800|420
+FILTER_query|start_rlvr_pipeline.py|v_FILTER|rlvr|4|1800|420
+QWEN3_06b|start_rlvr_pipeline.py|v_QWEN3|rlvr|4|1800|420
+M_1P5B|start_rlvr_pipeline.py|v_1P5B|rlvr|4|1800|420
+M_1P5B_offload|start_rlvr_pipeline.py|v_1P5B_OFFLOAD|rlvr|4|2400|600
+JUDGE_llm|start_rlvr_pipeline.py|v_JUDGE|rlvr|4|2400|600
+TQ_transfer_queue|start_rlvr_pipeline.py|v_TQ|rlvr|4|1800|420
+PROF_profiler|start_rlvr_pipeline.py|v_PROF|rlvr|2|1800|600
+RESUME_a_save|start_rlvr_pipeline.py|v_RESUME_a|rlvr|2|1800|420|keep_ckpt_after
+RESUME_b_load|start_rlvr_pipeline.py|v_RESUME_b_run|rlvr|2|1800|420|uses_ckpt
+LORA|start_rlvr_pipeline.py|v_LORA|rlvr|4|1800|420
+TP2_vllm_2xpu|start_rlvr_pipeline.py|v_TP2|rlvr|4|1800|420
+# --- colocated / one device (CPU-staging weight sync) ---
+A0_colocated|start_rlvr_pipeline.py|v_A0_colocated|rlvr|4|1800|420
+B1_onedevice|start_rlvr_pipeline.py|v_B1_onedevice|rlvr|4|1800|420
+W1b_colocated|start_rlvr_pipeline.py|v_W1b_colocated|rlvr|6|1800|420
+B1_onedevice_qwen3|start_rlvr_pipeline.py|v_B1_onedevice_QWEN3|rlvr|4|1800|420
+PPO_colocated|start_rlvr_pipeline.py|v_PPO_colocated|rlvr|4|1800|420
+M_1P5B_offload_B1|start_rlvr_pipeline.py|v_1P5B_OFFLOAD_B1|rlvr|4|2400|600
+# --- DPO / SFT ---
+DPO_fsdp2ref_reshard|start_dpo_pipeline.py|R2c_DPO2_fsdp2ref_reshard|dpo|16|1500|420
+DPO_1xpu|start_dpo_pipeline.py|T3_DPO_1xpu|dpo|16|1500|420
+DPO_2xpu|start_dpo_pipeline.py|T4_DPO_2xpu_recheck|dpo|16|1500|420
+DPO_fsdp2ref_reshard_retry|start_dpo_pipeline.py|T5_DPO_fsdp2ref_reshard_retry|dpo|16|1500|420
+# SFT_1xpu (T2_SFT_1xpu) validates on 20k rows, about 22 h; SFT_1xpu_val500 below validates on 500 rows
+SFT_1xpu_val500|start_sft_pipeline.py|T2_SFT_1xpu_val500|sft|16|3600|420
+# --- agentic ---
+AG_frozen_lake|start_agentic_pipeline.py|frozen_lake_fsdp2_disagg|agentic|6|2400|600
+AG_frozen_lake_async|start_agentic_pipeline.py|frozen_lake_fsdp2_disagg_async|agentic|6|2400|600
+AG_frozen_lake_gigpo|start_agentic_pipeline.py|frozen_lake_fsdp2_disagg_gigpo|agentic|6|2400|600
+AG_frozen_lake_coloc|start_agentic_pipeline.py|frozen_lake_fsdp2_coloc|agentic|6|2400|600
+AG_frozen_lake_partialgpu|start_agentic_pipeline.py|frozen_lake_fsdp2_partialgpu|agentic|6|2400|600
+AG_frozen_lake_pg_var|start_agentic_pipeline.py|ag_agent_val_frozen_lake-pg_var|agentic|6|2400|600
+AG_frozen_lake_pg_var_is_correct|start_agentic_pipeline.py|ag_agent_val_frozen_lake-pg_var_is_correct|agentic|6|2400|600
+AG_partial_rollout|start_agentic_pipeline.py|ci_frozen_lake_partial_rollout|agentic|6|2400|600
+AG_sokoban|start_agentic_pipeline.py|sokoban_fsdp2_disagg|agentic|6|2400|600
+AG_sokoban_dynbatch|start_agentic_pipeline.py|sokoban_fsdp2_disagg_dynbatch|agentic|6|2400|600
+AG_sokoban_ppo|start_agentic_pipeline.py|ag_agentic_val_sokoban_ppo|agentic|6|2400|600
+AG_sokoban_sao|start_agentic_pipeline.py|ag_agentic_val_sokoban_sao|agentic|6|2400|600
+AG_sokoban_ppo_async|start_agentic_pipeline.py|ag_agentic_val_sokoban_ppo_as1|agentic|6|2400|600
+AG_sokoban_sao_async|start_agentic_pipeline.py|ag_agentic_val_sokoban_sao_as1|agentic|6|2400|600
+AG_sokoban_native|start_agentic_pipeline.py|ag_agentic_val_sokoban_native|agentic|6|2400|600
+AG_sokoban_agent_runner|start_agentic_pipeline.py|ag_agentic_val_sokoban_agent_runner|agentic|6|2400|600
+AG_rollout_only|start_agentic_rollout_pipeline.py|rollout_sokoban|agentic|4|2400|600
+# --- distillation ---
+DI_onpolicy|start_onpolicy_distill_pipeline.py|opd_qwen25_05b_from_15b|distill|4|2400|600
+DI_onpolicy_coloc|start_onpolicy_distill_pipeline.py|opd_qwen25_05b_from_15b_coloc|distill|4|2400|600
+DI_offpolicy_ncclonly|start_distill_pipeline.py|offpolicy_05b_from_15b_ncclonly|distill|8|3000|900
+DI_offpolicy_ray|start_distill_pipeline.py|offpolicy_05b_from_15b_ray|distill|8|3000|900
+# --- vision-language ---
+VL_3b_math|start_rlvr_vl_pipeline.py|vl3b_math_fsdp2_offload_disagg|vl|4|3000|900
+# --- long run last ---
+L3_40steps|start_rlvr_pipeline.py|v_L3|rlvr|40|7200|600
+TOPR_critic_xpu1|start_rlvr_pipeline.py|ex_topr_crit1|rlvr|4|3000|900

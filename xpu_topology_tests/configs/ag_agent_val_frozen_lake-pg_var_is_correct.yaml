@@ -1,0 +1,136 @@
+defaults:
+- ../config/traj_envs@_here_
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: xpu_ag_frozen_lake-pg_var_is_correct
+seed: 42
+logging_dir: ${oc.env:ROLL_WORK}/output/logs
+output_dir: ${oc.env:ROLL_WORK}/output
+render_save_dir: ${oc.env:ROLL_WORK}/render
+system_envs:
+  USE_MODELSCOPE: '0'
+track_with: tensorboard
+tracker_kwargs:
+  log_dir: ${oc.env:ROLL_WORK}/tensorboard/xpu_ag_frozen_lake-pg_var_is_correct
+checkpoint_config:
+  type: file_system
+  output_dir: ${oc.env:ROLL_WORK}/checkpoints/agentic_frozen_lake
+num_gpus_per_node: 2
+max_steps: 6
+save_steps: 10000
+logging_steps: 1
+eval_steps: 10
+resume_from_checkpoint: false
+rollout_batch_size: 16
+val_batch_size: 16
+sequence_length: 4096
+advantage_clip: 0.2
+ppo_epochs: 1
+adv_estimator: grpo
+init_kl_coef: 0.0
+whiten_advantages: true
+entropy_loss_coef: 0
+max_grad_norm: 1.0
+pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+reward_pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+actor_train:
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: null
+  training_args:
+    learning_rate: 1.0e-06
+    weight_decay: 0
+    per_device_train_batch_size: 1
+    gradient_accumulation_steps: 16
+    warmup_steps: 10
+    lr_scheduler_type: cosine
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      reshard_after_forward: true
+      offload_policy: false
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+  worker_cls: roll.pipeline.agentic.agentic_actor_pg_worker.ActorWorker
+  pg_variant: topr
+actor_infer:
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: true
+    dtype: bf16
+  generating_args:
+    max_new_tokens: 128
+    top_p: 0.99
+    top_k: 100
+    num_beams: 1
+    temperature: 0.99
+    num_return_sequences: 1
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: vllm
+    strategy_config:
+      gpu_memory_utilization: 0.4
+      block_size: 16
+      load_format: auto
+  device_mapping: list(range(1,2))
+  infer_batch_size: 1
+reference:
+  model_args:
+    attn_implementation: sdpa
+    disable_gradient_checkpointing: true
+    dtype: bf16
+    model_type: null
+  data_args:
+    template: qwen2_5
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config: null
+  device_mapping: list(range(0,1))
+  infer_batch_size: 1
+reward_normalization:
+  grouping: tags
+  method: identity
+train_env_manager:
+  format_penalty: -0.15
+  max_env_num_per_worker: 16
+  num_env_groups: 1
+  group_size: 1
+  tags:
+  - FrozenLake
+  num_groups_partition:
+  - 1
+val_env_manager:
+  max_env_num_per_worker: 1
+  num_env_groups: 2
+  group_size: 1
+  tags:
+  - SimpleSokoban
+  - LargerSokoban
+  num_groups_partition:
+  - 1
+  - 1
+max_tokens_per_step: 64
+custom_envs:
+  SimpleSokoban: ${custom_env.SimpleSokoban}
+  LargerSokoban: ${custom_env.LargerSokoban}
+  SokobanDifferentGridVocab: ${custom_env.SokobanDifferentGridVocab}
+  FrozenLake: ${custom_env.FrozenLake}
+enable_old_logprobs_recompute: true
+train_infer_correction:
+  filters:
+  - enabled: true
+    agg_type: segment
+    ratio_enabled: true
+    diff_enabled: true
+    ratio_low: 0.8
+    ratio_high: 1.05
+    diff_low: -0.1
+    diff_high: 0.1
