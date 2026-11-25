@@ -8,8 +8,11 @@ from typing import Any, Callable, Optional
 
 import torch
 import torch.distributed as dist
-from flash_attn import flash_attn_func, flash_attn_varlen_func
-from flash_attn.bert_padding import pad_input
+try:
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
+    from flash_attn.bert_padding import pad_input
+except ImportError:  # transformers>=4.53 path does not use these; XPU has no flash_attn package
+    flash_attn_func = flash_attn_varlen_func = pad_input = None
 from torch import Tensor
 from transformers.cache_utils import Cache
 from transformers.modeling_flash_attention_utils import _upad_input
