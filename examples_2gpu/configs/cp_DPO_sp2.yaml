@@ -1,0 +1,69 @@
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+exp_name: cp_cp_DPO_sp2
+seed: 42
+logging_dir: ${oc.env:ROLL_WORK}/output/runs/T4_DPO_2xpu_recheck/output/logs
+output_dir: ${oc.env:ROLL_WORK}/output/runs/T4_DPO_2xpu_recheck/output
+track_with: stdout
+checkpoint_config:
+  type: file_system
+  output_dir: ${oc.env:ROLL_WORK}/output/runs/T4_DPO_2xpu_recheck/ckpt
+max_steps: 16
+save_steps: 1000
+logging_steps: 1
+eval_steps: 8
+resume_from_checkpoint: false
+sequence_length: 512
+num_nodes: 1
+num_gpus_per_node: 2
+pretrain: ${oc.env:ROLL_WORK}/models/Qwen2.5-0.5B-Instruct
+ipo: false
+beta: 0.1
+label_smoothing: 0.0
+chosen_key: chosen
+rejected_key: rejected
+global_template: qwen2_5
+validation:
+  data_args:
+    file_name: ${oc.env:ROLL_WORK}/extra_data/comparison_gpt4_val64.json
+actor_train:
+  model_args:
+    disable_gradient_checkpointing: false
+    dtype: bf16
+    model_type: null
+    attn_implementation: fa2
+    ulysses_size: 2
+  training_args:
+    lr_scheduler_type: constant
+    learning_rate: 1.0e-06
+    weight_decay: 0
+    per_device_train_batch_size: 4
+    gradient_accumulation_steps: 1
+    warmup_steps: 0
+    num_train_epochs: 10
+  data_args:
+    file_name:
+    - ${oc.env:ROLL_WORK}/extra_data/comparison_gpt4_data_zh.json
+    preprocessing_num_workers: 1
+  strategy_args:
+    strategy_name: fsdp2_train
+    strategy_config:
+      enable_mix_precision: true
+      fsdp_size: 2
+      offload_policy: false
+      reshard_after_forward: true
+  device_mapping: list(range(0,2))
+  infer_batch_size: 4
+reference:
+  model_args:
+    disable_gradient_checkpointing: true
+    dtype: bf16
+    model_type: null
+    attn_implementation: fa2
+  strategy_args:
+    strategy_name: hf_infer
+    strategy_config: null
+  device_mapping: list(range(0,2))
+  infer_batch_size: 4
